@@ -1373,18 +1373,6 @@ BEGIN
     END;
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_inventory_levels_block_delete
-BEFORE DELETE ON inventory_levels
-FOR EACH ROW
-WHEN EXISTS (
-    SELECT 1
-    FROM inventory_items
-    WHERE id = OLD.inventory_item_id
-)
-BEGIN
-    SELECT RAISE(ABORT, 'inventory_levels is managed by inventory_movements');
-END;
-
 CREATE TRIGGER IF NOT EXISTS trg_inventory_movements_validate_before_insert
 BEFORE INSERT ON inventory_movements
 FOR EACH ROW
@@ -1672,33 +1660,12 @@ BEGIN
     WHERE id = OLD.order_id;
 END;
 
-
-CREATE TRIGGER IF NOT EXISTS trg_orders_normalize_amounts_after_update
-AFTER UPDATE OF subtotal_amount, discount_amount, order_discount_amount, tax_amount, total_amount, shipping_amount ON orders
+CREATE TRIGGER IF NOT EXISTS trg_orders_recalc_total_after_shipping_or_discount_update
+AFTER UPDATE OF shipping_amount, order_discount_amount ON orders
 FOR EACH ROW
-WHEN EXISTS (
-    SELECT 1
-    FROM order_items
-    WHERE order_id = NEW.id
-)
 BEGIN
     UPDATE orders
-    SET subtotal_amount = COALESCE((
-                SELECT SUM(quantity * unit_price_amount)
-                FROM order_items
-                WHERE order_id = NEW.id
-            ), 0),
-        discount_amount = COALESCE((
-                SELECT SUM(discount_amount)
-                FROM order_items
-                WHERE order_id = NEW.id
-            ), 0),
-        tax_amount = COALESCE((
-                SELECT SUM(tax_amount)
-                FROM order_items
-                WHERE order_id = NEW.id
-            ), 0),
-        total_amount = COALESCE((
+    SET total_amount = COALESCE((
                 SELECT SUM(quantity * unit_price_amount)
                 FROM order_items
                 WHERE order_id = NEW.id
@@ -1708,49 +1675,15 @@ BEGIN
                 FROM order_items
                 WHERE order_id = NEW.id
             ), 0)
-            - order_discount_amount
-            + shipping_amount
+            - NEW.order_discount_amount
+            + NEW.shipping_amount
             + COALESCE((
                 SELECT SUM(tax_amount)
                 FROM order_items
                 WHERE order_id = NEW.id
             ), 0),
         updated_at = CURRENT_TIMESTAMP
-    WHERE id = NEW.id
-      AND (
-            subtotal_amount != COALESCE((
-                SELECT SUM(quantity * unit_price_amount)
-                FROM order_items
-                WHERE order_id = NEW.id
-            ), 0)
-            OR discount_amount != COALESCE((
-                SELECT SUM(discount_amount)
-                FROM order_items
-                WHERE order_id = NEW.id
-            ), 0)
-            OR tax_amount != COALESCE((
-                SELECT SUM(tax_amount)
-                FROM order_items
-                WHERE order_id = NEW.id
-            ), 0)
-            OR total_amount != COALESCE((
-                SELECT SUM(quantity * unit_price_amount)
-                FROM order_items
-                WHERE order_id = NEW.id
-            ), 0)
-                - COALESCE((
-                    SELECT SUM(discount_amount)
-                    FROM order_items
-                    WHERE order_id = NEW.id
-                ), 0)
-                - order_discount_amount
-                + shipping_amount
-                + COALESCE((
-                    SELECT SUM(tax_amount)
-                    FROM order_items
-                    WHERE order_id = NEW.id
-                ), 0)
-      );
+    WHERE id = NEW.id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_orders_block_amount_changes_after_payment
@@ -2684,3 +2617,13 @@ CREATE TRIGGER IF NOT EXISTS trg_metafield_values_updated_at
 AFTER UPDATE ON metafield_values FOR EACH ROW
 WHEN NEW.updated_at = OLD.updated_at
 BEGIN UPDATE metafield_values SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_orders_updated_at
+AFTER UPDATE ON orders FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE orders SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_inventory_levels_updated_at
+AFTER UPDATE ON inventory_levels FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE inventory_levels SET updated_at = CURRENT_TIMESTAMP WHERE inventory_item_id = NEW.inventory_item_id; END;
