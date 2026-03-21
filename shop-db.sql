@@ -1,3 +1,5 @@
+-- NOTE: these PRAGMAs are per-connection, NOT persisted in the database file.
+-- Every application connection MUST re-execute them on open.
 PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
@@ -135,6 +137,7 @@ CREATE TABLE IF NOT EXISTS collections (
     slug                TEXT NOT NULL COLLATE NOCASE UNIQUE,
     status              TEXT NOT NULL DEFAULT 'draft'
                             CHECK (status IN ('draft', 'active', 'archived')),
+    description_html    TEXT NOT NULL DEFAULT '',
     seo_title           TEXT NOT NULL DEFAULT '',
     seo_description     TEXT NOT NULL DEFAULT '',
     published_at        TEXT,
@@ -271,7 +274,7 @@ CREATE TABLE IF NOT EXISTS orders (
     tax_amount          INTEGER NOT NULL DEFAULT 0 CHECK (tax_amount >= 0),
     total_amount        INTEGER NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
     payment_status      TEXT NOT NULL DEFAULT 'pending'
-                            CHECK (payment_status IN ('pending', 'authorized', 'paid', 'partially_refunded', 'refunded', 'failed')),
+                            CHECK (payment_status IN ('pending', 'authorized', 'partially_paid', 'paid', 'partially_refunded', 'refunded', 'failed')),
     fulfillment_status  TEXT NOT NULL DEFAULT 'unfulfilled'
                             CHECK (fulfillment_status IN ('unfulfilled', 'fulfilled', 'returned')),
     order_status        TEXT NOT NULL DEFAULT 'open'
@@ -282,7 +285,6 @@ CREATE TABLE IF NOT EXISTS orders (
     cancelled_at        TEXT,
     created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CHECK (subtotal_amount >= discount_amount + order_discount_amount),
     CHECK (
         CASE
             WHEN json_valid(billing_address_json) THEN json_type(billing_address_json) = 'object'
@@ -660,21 +662,6 @@ FOR EACH ROW
 WHEN NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL AND NEW.status = 'active'
 BEGIN
     SELECT RAISE(ABORT, 'set product to draft or archived before soft-deleting');
-END;
-
-CREATE TRIGGER IF NOT EXISTS trg_products_validate_before_activate_insert
-BEFORE INSERT ON products
-FOR EACH ROW
-WHEN NEW.status = 'active'
-BEGIN
-    SELECT CASE
-        WHEN NOT EXISTS (
-            SELECT 1
-            FROM product_variants
-            WHERE product_id = NEW.id
-        )
-        THEN RAISE(ABORT, 'active product must have at least one variant')
-    END;
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_products_validate_before_activate
@@ -1196,22 +1183,6 @@ BEGIN
     WHERE id IN (OLD.variant_id, NEW.variant_id);
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_products_validate_featured_media_before_insert
-BEFORE INSERT ON products
-FOR EACH ROW
-WHEN NEW.featured_media_id IS NOT NULL
-BEGIN
-    SELECT CASE
-        WHEN NOT EXISTS (
-            SELECT 1
-            FROM product_media
-            WHERE product_id = NEW.id
-              AND media_id = NEW.featured_media_id
-        )
-        THEN RAISE(ABORT, 'featured media must belong to the product')
-    END;
-END;
-
 CREATE TRIGGER IF NOT EXISTS trg_products_validate_featured_media_before_update
 BEFORE UPDATE OF featured_media_id ON products
 FOR EACH ROW
@@ -1383,7 +1354,24 @@ BEGIN
     WHERE inventory_item_id = NEW.id;
 END;
 
-
+CREATE TRIGGER IF NOT EXISTS trg_inventory_items_validate_backorder_before_update
+BEFORE UPDATE OF allow_backorder ON inventory_items
+FOR EACH ROW
+WHEN NEW.allow_backorder = 0 AND OLD.allow_backorder = 1
+BEGIN
+    SELECT CASE
+        WHEN (
+            SELECT reserved
+            FROM inventory_levels
+            WHERE inventory_item_id = OLD.id
+        ) > (
+            SELECT on_hand
+            FROM inventory_levels
+            WHERE inventory_item_id = OLD.id
+        )
+        THEN RAISE(ABORT, 'cannot disable backorder while reserved exceeds on_hand')
+    END;
+END;
 
 CREATE TRIGGER IF NOT EXISTS trg_inventory_levels_block_delete
 BEFORE DELETE ON inventory_levels
@@ -1786,6 +1774,14 @@ BEGIN
     SELECT RAISE(ABORT, 'cannot change order totals after payment activity');
 END;
 
+CREATE TRIGGER IF NOT EXISTS trg_orders_normalize_payment_status_after_insert
+AFTER INSERT ON orders
+FOR EACH ROW
+WHEN NEW.total_amount = 0
+BEGIN
+    UPDATE orders SET payment_status = 'paid' WHERE id = NEW.id;
+END;
+
 CREATE TRIGGER IF NOT EXISTS trg_orders_normalize_payment_status_after_update
 AFTER UPDATE OF payment_status, total_amount ON orders
 FOR EACH ROW
@@ -1810,6 +1806,7 @@ BEGIN
                 WHERE order_id = NEW.id
                   AND status = 'refunded'
             ) THEN 'partially_refunded'
+            WHEN total_amount = 0 THEN 'paid'
             WHEN total_amount > 0
              AND COALESCE((
                 SELECT SUM(amount)
@@ -1817,6 +1814,12 @@ BEGIN
                 WHERE order_id = NEW.id
                   AND status = 'captured'
             ), 0) >= total_amount THEN 'paid'
+            WHEN COALESCE((
+                SELECT SUM(amount)
+                FROM payments
+                WHERE order_id = NEW.id
+                  AND status = 'captured'
+            ), 0) > 0 THEN 'partially_paid'
             WHEN EXISTS (
                 SELECT 1
                 FROM payments
@@ -1858,6 +1861,7 @@ BEGIN
                 WHERE order_id = NEW.id
                   AND status = 'refunded'
             ) THEN 'partially_refunded'
+            WHEN total_amount = 0 THEN 'paid'
             WHEN total_amount > 0
              AND COALESCE((
                 SELECT SUM(amount)
@@ -1865,6 +1869,12 @@ BEGIN
                 WHERE order_id = NEW.id
                   AND status = 'captured'
             ), 0) >= total_amount THEN 'paid'
+            WHEN COALESCE((
+                SELECT SUM(amount)
+                FROM payments
+                WHERE order_id = NEW.id
+                  AND status = 'captured'
+            ), 0) > 0 THEN 'partially_paid'
             WHEN EXISTS (
                 SELECT 1
                 FROM payments
@@ -2105,6 +2115,7 @@ BEGIN
                 WHERE order_id = NEW.order_id
                   AND status = 'refunded'
             ) THEN 'partially_refunded'
+            WHEN total_amount = 0 THEN 'paid'
             WHEN total_amount > 0
              AND COALESCE((
                 SELECT SUM(amount)
@@ -2112,6 +2123,12 @@ BEGIN
                 WHERE order_id = NEW.order_id
                   AND status = 'captured'
             ), 0) >= total_amount THEN 'paid'
+            WHEN COALESCE((
+                SELECT SUM(amount)
+                FROM payments
+                WHERE order_id = NEW.order_id
+                  AND status = 'captured'
+            ), 0) > 0 THEN 'partially_paid'
             WHEN EXISTS (
                 SELECT 1
                 FROM payments
@@ -2160,6 +2177,7 @@ BEGIN
                 WHERE order_id = orders.id
                   AND status = 'refunded'
             ) THEN 'partially_refunded'
+            WHEN total_amount = 0 THEN 'paid'
             WHEN total_amount > 0
              AND COALESCE((
                 SELECT SUM(amount)
@@ -2167,6 +2185,12 @@ BEGIN
                 WHERE order_id = orders.id
                   AND status = 'captured'
             ), 0) >= total_amount THEN 'paid'
+            WHEN COALESCE((
+                SELECT SUM(amount)
+                FROM payments
+                WHERE order_id = orders.id
+                  AND status = 'captured'
+            ), 0) > 0 THEN 'partially_paid'
             WHEN EXISTS (
                 SELECT 1
                 FROM payments
@@ -2215,6 +2239,7 @@ BEGIN
                 WHERE order_id = OLD.order_id
                   AND status = 'refunded'
             ) THEN 'partially_refunded'
+            WHEN total_amount = 0 THEN 'paid'
             WHEN total_amount > 0
              AND COALESCE((
                 SELECT SUM(amount)
@@ -2222,6 +2247,12 @@ BEGIN
                 WHERE order_id = OLD.order_id
                   AND status = 'captured'
             ), 0) >= total_amount THEN 'paid'
+            WHEN COALESCE((
+                SELECT SUM(amount)
+                FROM payments
+                WHERE order_id = OLD.order_id
+                  AND status = 'captured'
+            ), 0) > 0 THEN 'partially_paid'
             WHEN EXISTS (
                 SELECT 1
                 FROM payments
@@ -2582,3 +2613,74 @@ BEGIN
         THEN RAISE(ABORT, 'metafield value must match definition type json')
     END;
 END;
+
+-- =========================================================
+-- updated_at auto-refresh triggers
+-- WHEN guard: only fire when the application did not
+-- explicitly set updated_at, preventing infinite recursion.
+-- =========================================================
+
+CREATE TRIGGER IF NOT EXISTS trg_shop_settings_updated_at
+AFTER UPDATE ON shop_settings FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE shop_settings SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_products_updated_at
+AFTER UPDATE ON products FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE products SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_product_variants_updated_at
+AFTER UPDATE ON product_variants FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE product_variants SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_collections_updated_at
+AFTER UPDATE ON collections FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE collections SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_inventory_items_updated_at
+AFTER UPDATE ON inventory_items FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE inventory_items SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_customers_updated_at
+AFTER UPDATE ON customers FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE customers SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_customer_addresses_updated_at
+AFTER UPDATE ON customer_addresses FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE customer_addresses SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_carts_updated_at
+AFTER UPDATE ON carts FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE carts SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_cart_items_updated_at
+AFTER UPDATE ON cart_items FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE cart_items SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_pages_updated_at
+AFTER UPDATE ON pages FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE pages SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_menus_updated_at
+AFTER UPDATE ON menus FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE menus SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_metafield_definitions_updated_at
+AFTER UPDATE ON metafield_definitions FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE metafield_definitions SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_metafield_values_updated_at
+AFTER UPDATE ON metafield_values FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE metafield_values SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
