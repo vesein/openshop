@@ -155,6 +155,56 @@ CREATE TABLE IF NOT EXISTS collection_products (
 );
 
 -- =========================================================
+-- promotions
+-- 统一管理优惠码 / BOGO / 满减 / 包邮
+-- rules_json 由应用层按 type 解读
+-- =========================================================
+CREATE TABLE IF NOT EXISTS promotions (
+    id                  INTEGER PRIMARY KEY,
+    name                TEXT NOT NULL,
+    type                TEXT NOT NULL
+                            CHECK (type IN ('percentage', 'fixed_amount', 'free_shipping', 'bogo')),
+    status              TEXT NOT NULL DEFAULT 'draft'
+                            CHECK (status IN ('draft', 'active', 'archived')),
+    starts_at           TEXT,
+    ends_at             TEXT,
+    usage_limit         INTEGER,
+    usage_count         INTEGER NOT NULL DEFAULT 0,
+    once_per_customer   INTEGER NOT NULL DEFAULT 0
+                            CHECK (once_per_customer IN (0, 1)),
+    rules_json          TEXT NOT NULL DEFAULT '{}'
+                            CHECK (
+                                CASE
+                                    WHEN json_valid(rules_json) THEN json_type(rules_json) = 'object'
+                                    ELSE 0
+                                END
+                            ),
+    created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS discount_codes (
+    id                  INTEGER PRIMARY KEY,
+    code                TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    promotion_id        INTEGER NOT NULL,
+    usage_limit         INTEGER,
+    usage_count         INTEGER NOT NULL DEFAULT 0,
+    created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS order_discount_codes (
+    order_id            INTEGER NOT NULL,
+    discount_code_id    INTEGER NOT NULL,
+    promotion_id        INTEGER NOT NULL,
+    PRIMARY KEY (order_id, discount_code_id),
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (discount_code_id) REFERENCES discount_codes(id) ON DELETE RESTRICT,
+    FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE RESTRICT
+);
+
+-- =========================================================
 -- inventory
 -- 单店、单库存池，不做 location
 -- inventory_levels 由 inventory_movements 触发器维护
@@ -171,10 +221,9 @@ CREATE TABLE IF NOT EXISTS inventory_items (
 
 CREATE TABLE IF NOT EXISTS inventory_levels (
     inventory_item_id   INTEGER PRIMARY KEY,
-    on_hand             INTEGER NOT NULL DEFAULT 0,
-    reserved            INTEGER NOT NULL DEFAULT 0,
+    on_hand             INTEGER NOT NULL DEFAULT 0 CHECK (on_hand >= 0),
+    reserved            INTEGER NOT NULL DEFAULT 0 CHECK (reserved >= 0),
     updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CHECK (reserved >= 0),
     FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id) ON DELETE CASCADE
 );
 
@@ -250,6 +299,7 @@ CREATE TABLE IF NOT EXISTS cart_items (
     variant_id          INTEGER NOT NULL,
     quantity            INTEGER NOT NULL CHECK (quantity > 0),
     unit_price_amount   INTEGER NOT NULL DEFAULT 0 CHECK (unit_price_amount >= 0),
+    discount_amount     INTEGER NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
     created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (cart_id, variant_id),
@@ -271,6 +321,7 @@ CREATE TABLE IF NOT EXISTS orders (
     discount_amount     INTEGER NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
     order_discount_amount INTEGER NOT NULL DEFAULT 0 CHECK (order_discount_amount >= 0),
     shipping_amount     INTEGER NOT NULL DEFAULT 0 CHECK (shipping_amount >= 0),
+    shipping_discount_amount INTEGER NOT NULL DEFAULT 0 CHECK (shipping_discount_amount >= 0),
     tax_amount          INTEGER NOT NULL DEFAULT 0 CHECK (tax_amount >= 0),
     total_amount        INTEGER NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
     payment_status      TEXT NOT NULL DEFAULT 'pending'
@@ -298,6 +349,7 @@ CREATE TABLE IF NOT EXISTS orders (
         END
     ),
     CHECK (customer_id IS NOT NULL OR email != ''),
+    CHECK (shipping_discount_amount <= shipping_amount),
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
 );
 
@@ -321,11 +373,13 @@ CREATE TABLE IF NOT EXISTS order_items (
                                     ELSE 0
                                 END
                             ),
+    promotion_id        INTEGER,
     created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK (quantity * unit_price_amount >= discount_amount),
     FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL,
-    FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE SET NULL
+    FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE SET NULL,
+    FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE RESTRICT
 );
 
 CREATE TABLE IF NOT EXISTS payments (
@@ -420,7 +474,7 @@ CREATE TABLE IF NOT EXISTS menu_items (
 CREATE TABLE IF NOT EXISTS metafield_definitions (
     id                  INTEGER PRIMARY KEY,
     resource_type       TEXT NOT NULL
-                            CHECK (resource_type IN ('shop', 'product', 'variant', 'collection', 'customer', 'order', 'page')),
+                            CHECK (resource_type IN ('shop', 'product', 'variant', 'collection', 'customer', 'order', 'page', 'promotion')),
     namespace           TEXT NOT NULL,
     key                 TEXT NOT NULL,
     name                TEXT NOT NULL,
@@ -464,7 +518,7 @@ CREATE TABLE IF NOT EXISTS metafield_values (
     id                  INTEGER PRIMARY KEY,
     definition_id       INTEGER NOT NULL,
     resource_type       TEXT NOT NULL
-                            CHECK (resource_type IN ('shop', 'product', 'variant', 'collection', 'customer', 'order', 'page')),
+                            CHECK (resource_type IN ('shop', 'product', 'variant', 'collection', 'customer', 'order', 'page', 'promotion')),
     resource_id         INTEGER NOT NULL,
     value_text          TEXT,
     value_integer       INTEGER,
@@ -585,6 +639,23 @@ CREATE INDEX IF NOT EXISTS idx_orders_payment_fulfillment
 
 CREATE INDEX IF NOT EXISTS idx_order_items_order
     ON order_items(order_id, id);
+
+-- promotions / discount codes
+CREATE INDEX IF NOT EXISTS idx_promotions_status_dates
+    ON promotions(status, starts_at, ends_at);
+
+CREATE INDEX IF NOT EXISTS idx_discount_codes_promotion
+    ON discount_codes(promotion_id);
+
+CREATE INDEX IF NOT EXISTS idx_order_items_promotion
+    ON order_items(promotion_id)
+    WHERE promotion_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_order_discount_codes_order
+    ON order_discount_codes(order_id);
+
+CREATE INDEX IF NOT EXISTS idx_order_discount_codes_promotion
+    ON order_discount_codes(promotion_id);
 
 CREATE INDEX IF NOT EXISTS idx_payments_order
     ON payments(order_id, created_at DESC);
@@ -1569,6 +1640,7 @@ BEGIN
             ), 0)
             - order_discount_amount
             + shipping_amount
+            - shipping_discount_amount
             + COALESCE((
                 SELECT SUM(tax_amount)
                 FROM order_items
@@ -1610,6 +1682,7 @@ BEGIN
             ), 0)
             - order_discount_amount
             + shipping_amount
+            - shipping_discount_amount
             + COALESCE((
                 SELECT SUM(tax_amount)
                 FROM order_items
@@ -1651,6 +1724,7 @@ BEGIN
             ), 0)
             - order_discount_amount
             + shipping_amount
+            - shipping_discount_amount
             + COALESCE((
                 SELECT SUM(tax_amount)
                 FROM order_items
@@ -1661,7 +1735,7 @@ BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_orders_recalc_total_after_shipping_or_discount_update
-AFTER UPDATE OF shipping_amount, order_discount_amount ON orders
+AFTER UPDATE OF shipping_amount, shipping_discount_amount, order_discount_amount ON orders
 FOR EACH ROW
 BEGIN
     UPDATE orders
@@ -1677,6 +1751,7 @@ BEGIN
             ), 0)
             - NEW.order_discount_amount
             + NEW.shipping_amount
+            - NEW.shipping_discount_amount
             + COALESCE((
                 SELECT SUM(tax_amount)
                 FROM order_items
@@ -1687,13 +1762,14 @@ BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_orders_block_amount_changes_after_payment
-BEFORE UPDATE OF subtotal_amount, discount_amount, order_discount_amount, shipping_amount, tax_amount, total_amount ON orders
+BEFORE UPDATE OF subtotal_amount, discount_amount, order_discount_amount, shipping_amount, shipping_discount_amount, tax_amount, total_amount ON orders
 FOR EACH ROW
 WHEN (
         NEW.subtotal_amount != OLD.subtotal_amount
      OR NEW.discount_amount != OLD.discount_amount
      OR NEW.order_discount_amount != OLD.order_discount_amount
      OR NEW.shipping_amount != OLD.shipping_amount
+     OR NEW.shipping_discount_amount != OLD.shipping_discount_amount
      OR NEW.tax_amount != OLD.tax_amount
      OR NEW.total_amount != OLD.total_amount
 )
@@ -2395,6 +2471,15 @@ BEGIN
       AND resource_id = OLD.id;
 END;
 
+CREATE TRIGGER IF NOT EXISTS trg_promotions_delete_metafields_before_delete
+BEFORE DELETE ON promotions
+FOR EACH ROW
+BEGIN
+    DELETE FROM metafield_values
+    WHERE resource_type = 'promotion'
+      AND resource_id = OLD.id;
+END;
+
 CREATE TRIGGER IF NOT EXISTS trg_metafield_values_validate_resource_before_insert
 BEFORE INSERT ON metafield_values
 FOR EACH ROW
@@ -2420,6 +2505,9 @@ BEGIN
         WHEN NEW.resource_type = 'page'
          AND NOT EXISTS (SELECT 1 FROM pages WHERE id = NEW.resource_id)
         THEN RAISE(ABORT, 'metafield page resource does not exist')
+        WHEN NEW.resource_type = 'promotion'
+         AND NOT EXISTS (SELECT 1 FROM promotions WHERE id = NEW.resource_id)
+        THEN RAISE(ABORT, 'metafield promotion resource does not exist')
     END;
 END;
 
@@ -2496,6 +2584,9 @@ BEGIN
         WHEN NEW.resource_type = 'page'
          AND NOT EXISTS (SELECT 1 FROM pages WHERE id = NEW.resource_id)
         THEN RAISE(ABORT, 'metafield page resource does not exist')
+        WHEN NEW.resource_type = 'promotion'
+         AND NOT EXISTS (SELECT 1 FROM promotions WHERE id = NEW.resource_id)
+        THEN RAISE(ABORT, 'metafield promotion resource does not exist')
     END;
 END;
 
@@ -2627,3 +2718,63 @@ CREATE TRIGGER IF NOT EXISTS trg_inventory_levels_updated_at
 AFTER UPDATE ON inventory_levels FOR EACH ROW
 WHEN NEW.updated_at = OLD.updated_at
 BEGIN UPDATE inventory_levels SET updated_at = CURRENT_TIMESTAMP WHERE inventory_item_id = NEW.inventory_item_id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_promotions_updated_at
+AFTER UPDATE ON promotions FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE promotions SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_discount_codes_updated_at
+AFTER UPDATE ON discount_codes FOR EACH ROW
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN UPDATE discount_codes SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+-- =========================================================
+-- promotion validation triggers
+-- =========================================================
+
+CREATE TRIGGER IF NOT EXISTS trg_order_discount_codes_validate_before_insert
+BEFORE INSERT ON order_discount_codes
+FOR EACH ROW
+BEGIN
+    SELECT CASE
+        WHEN NOT EXISTS (
+            SELECT 1 FROM discount_codes
+            WHERE id = NEW.discount_code_id AND promotion_id = NEW.promotion_id
+        )
+        THEN RAISE(ABORT, 'discount code does not belong to the specified promotion')
+        WHEN NOT EXISTS (
+            SELECT 1 FROM promotions WHERE id = NEW.promotion_id AND status = 'active'
+        )
+        THEN RAISE(ABORT, 'promotion is not active')
+        WHEN EXISTS (
+            SELECT 1 FROM promotions
+            WHERE id = NEW.promotion_id
+              AND starts_at IS NOT NULL
+              AND starts_at > CURRENT_TIMESTAMP
+        )
+        THEN RAISE(ABORT, 'promotion has not started')
+        WHEN EXISTS (
+            SELECT 1 FROM promotions
+            WHERE id = NEW.promotion_id
+              AND ends_at IS NOT NULL
+              AND ends_at < CURRENT_TIMESTAMP
+        )
+        THEN RAISE(ABORT, 'promotion has expired')
+        WHEN EXISTS (
+            SELECT 1 FROM promotions
+            WHERE id = NEW.promotion_id
+              AND usage_limit IS NOT NULL
+              AND usage_count >= usage_limit
+        )
+        THEN RAISE(ABORT, 'promotion usage limit reached')
+    END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_order_discount_codes_increment_usage_after_insert
+AFTER INSERT ON order_discount_codes
+FOR EACH ROW
+BEGIN
+    UPDATE promotions SET usage_count = usage_count + 1 WHERE id = NEW.promotion_id;
+    UPDATE discount_codes SET usage_count = usage_count + 1 WHERE id = NEW.discount_code_id;
+END;
