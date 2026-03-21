@@ -1,0 +1,43 @@
+import { collectionDao } from "../db/dao";
+import type { InferInsertModel } from "drizzle-orm";
+import { collections } from "../db/schema";
+
+type CollectionInsert = InferInsertModel<typeof collections>;
+
+export const collectionService = {
+  list(opts: { status?: string; page?: number; pageSize?: number }) {
+    const items = collectionDao.list(opts);
+    const total = collectionDao.count({ status: opts.status });
+    return { items, total, page: opts.page ?? 1, pageSize: opts.pageSize ?? 20 };
+  },
+
+  getById(id: number) {
+    const collection = collectionDao.findById(id);
+    if (!collection) throw new Error("Collection not found");
+    return collection;
+  },
+
+  create(data: CollectionInsert) {
+    return collectionDao.create(data);
+  },
+
+  update(id: number, data: Partial<CollectionInsert>) {
+    return collectionDao.update(id, data);
+  },
+
+  delete(id: number) {
+    return collectionDao.delete(id);
+  },
+
+  addProduct(collectionId: number, productId: number, sortOrder = 0) {
+    return collectionDao.addProduct(collectionId, productId, sortOrder);
+  },
+
+  removeProduct(collectionId: number, productId: number) {
+    return collectionDao.removeProduct(collectionId, productId);
+  },
+
+  setProductOrder(collectionId: number, productId: number, sortOrder: number) {
+    return collectionDao.setProductOrder(collectionId, productId, sortOrder);
+  },
+};

@@ -11,7 +11,17 @@ declare module "*.svg" {
 declare module "*.module.css" {
   /**
    * A record of class names to their corresponding CSS module classes
-   */
+  */
   const classes: { readonly [key: string]: string };
   export = classes;
 }
+
+// Extend Request type for Bun.serve routes
+// Bun's BunRequest interface has params property
+declare global {
+  interface Request {
+    params: Record<string, string>;
+  }
+}
+
+export {};

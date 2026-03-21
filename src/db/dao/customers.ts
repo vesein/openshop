@@ -1,0 +1,93 @@
+import { eq, and, desc, asc, sql, like, isNull } from "drizzle-orm";
+import { db } from "../index";
+import * as s from "../schema";
+import type { InferInsertModel } from "drizzle-orm";
+
+export const customerDao = {
+  findById(id: number) {
+    const customer = db.select().from(s.customers)
+      .where(eq(s.customers.id, id)).get();
+    if (!customer) return null;
+    const addresses = db.select().from(s.customerAddresses)
+      .where(eq(s.customerAddresses.customerId, id))
+      .orderBy(desc(s.customerAddresses.isDefaultShipping)).all();
+    return { ...customer, addresses };
+  },
+
+  findByEmail(email: string) {
+    return db.select().from(s.customers)
+      .where(eq(s.customers.email, email)).get() ?? null;
+  },
+
+  list(opts: { search?: string; page?: number; pageSize?: number } = {}) {
+    const { search, page = 1, pageSize = 20 } = opts;
+    const conditions = [];
+    if (search) {
+      conditions.push(
+        sql`${s.customers.email} LIKE ${"%" + search + "%"} OR ${s.customers.firstName} LIKE ${"%" + search + "%"} OR ${s.customers.lastName} LIKE ${"%" + search + "%"}`
+      );
+    }
+
+    return db.select().from(s.customers)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(s.customers.createdAt))
+      .limit(pageSize).offset((page - 1) * pageSize)
+      .all();
+  },
+
+  count(opts: { search?: string } = {}) {
+    const conditions = [];
+    if (opts.search) {
+      conditions.push(
+        sql`${s.customers.email} LIKE ${"%" + opts.search + "%"} OR ${s.customers.firstName} LIKE ${"%" + opts.search + "%"} OR ${s.customers.lastName} LIKE ${"%" + opts.search + "%"}`
+      );
+    }
+    return db.select({ count: sql<number>`count(*)` })
+      .from(s.customers)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .get()!.count;
+  },
+
+  create(data: InferInsertModel<typeof s.customers>) {
+    return db.insert(s.customers).values(data).returning().get();
+  },
+
+  update(id: number, data: Partial<InferInsertModel<typeof s.customers>>) {
+    return db.update(s.customers)
+      .set({ ...data, updatedAt: new Date().toISOString() })
+      .where(eq(s.customers.id, id))
+      .returning().get();
+  },
+
+  delete(id: number) {
+    return db.delete(s.customers)
+      .where(eq(s.customers.id, id))
+      .returning().get();
+  },
+};
+
+export const addressDao = {
+  findByCustomerId(customerId: number) {
+    return db.select().from(s.customerAddresses)
+      .where(eq(s.customerAddresses.customerId, customerId))
+      .orderBy(desc(s.customerAddresses.isDefaultShipping))
+      .all();
+  },
+
+  create(data: InferInsertModel<typeof s.customerAddresses>) {
+    return db.insert(s.customerAddresses).values(data).returning().get();
+  },
+
+  update(id: number, data: Partial<InferInsertModel<typeof s.customerAddresses>>) {
+    return db.update(s.customerAddresses)
+      .set({ ...data, updatedAt: new Date().toISOString() })
+      .where(eq(s.customerAddresses.id, id))
+      .returning().get();
+  },
+
+  delete(id: number) {
+    return db.delete(s.customerAddresses)
+      .where(eq(s.customerAddresses.id, id))
+      .returning().get();
+  },
+};
