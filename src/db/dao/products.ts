@@ -2,6 +2,7 @@ import { eq, and, desc, asc, like, isNull, sql, inArray } from "drizzle-orm";
 import { db } from "../index";
 import * as s from "../schema";
 import type { InferInsertModel } from "drizzle-orm";
+import { formatTimestamp } from "./utils";
 
 // =========================================================
 // Products
@@ -52,19 +53,24 @@ export const productDao = {
   },
 
   create(data: InferInsertModel<typeof s.products>) {
-    return db.insert(s.products).values(data).returning().get();
+    const now = formatTimestamp();
+    return db.insert(s.products).values({
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.products>>) {
     return db.update(s.products)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, updatedAt: formatTimestamp() })
       .where(eq(s.products.id, id))
       .returning().get();
   },
 
   softDelete(id: number) {
     return db.update(s.products)
-      .set({ deletedAt: new Date().toISOString() })
+      .set({ deletedAt: formatTimestamp() })
       .where(eq(s.products.id, id))
       .returning().get();
   },

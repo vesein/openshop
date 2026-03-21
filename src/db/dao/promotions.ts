@@ -2,6 +2,7 @@ import { eq, and, desc, asc, sql, isNull, like, gte, lte } from "drizzle-orm";
 import { db } from "../index";
 import * as s from "../schema";
 import type { InferInsertModel } from "drizzle-orm";
+import { formatTimestamp } from "./utils";
 
 // =========================================================
 // Promotions
@@ -63,12 +64,17 @@ export const promotionDao = {
   },
 
   create(data: InferInsertModel<typeof s.promotions>) {
-    return db.insert(s.promotions).values(data).returning().get();
+    const now = formatTimestamp();
+    return db.insert(s.promotions).values({
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.promotions>>) {
     return db.update(s.promotions)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, updatedAt: formatTimestamp() })
       .where(eq(s.promotions.id, id))
       .returning().get();
   },
@@ -111,12 +117,17 @@ export const discountCodeDao = {
   },
 
   create(data: InferInsertModel<typeof s.discountCodes>) {
-    return db.insert(s.discountCodes).values(data).returning().get();
+    const now = formatTimestamp();
+    return db.insert(s.discountCodes).values({
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.discountCodes>>) {
     return db.update(s.discountCodes)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, updatedAt: formatTimestamp() })
       .where(eq(s.discountCodes.id, id))
       .returning().get();
   },

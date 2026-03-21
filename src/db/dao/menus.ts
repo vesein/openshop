@@ -2,6 +2,7 @@ import { eq, desc, asc } from "drizzle-orm";
 import { db } from "../index";
 import * as s from "../schema";
 import type { InferInsertModel } from "drizzle-orm";
+import { formatTimestamp } from "./utils";
 
 export const menuDao = {
   findById(id: number) {
@@ -27,12 +28,17 @@ export const menuDao = {
   },
 
   create(data: InferInsertModel<typeof s.menus>) {
-    return db.insert(s.menus).values(data).returning().get();
+    const now = formatTimestamp();
+    return db.insert(s.menus).values({
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.menus>>) {
     return db.update(s.menus)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, updatedAt: formatTimestamp() })
       .where(eq(s.menus.id, id))
       .returning().get();
   },

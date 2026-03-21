@@ -2,6 +2,7 @@ import { eq, and, desc, asc, sql, like, gte, lte } from "drizzle-orm";
 import { db } from "../index";
 import * as s from "../schema";
 import type { InferInsertModel } from "drizzle-orm";
+import { formatTimestamp } from "./utils";
 
 // =========================================================
 // Orders
@@ -71,19 +72,24 @@ export const orderDao = {
   },
 
   create(data: InferInsertModel<typeof s.orders>) {
-    return db.insert(s.orders).values(data).returning().get();
+    const now = formatTimestamp();
+    return db.insert(s.orders).values({
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.orders>>) {
     return db.update(s.orders)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, updatedAt: formatTimestamp() })
       .where(eq(s.orders.id, id))
       .returning().get();
   },
 
   dashboardStats() {
-    const now = new Date().toISOString();
-    const today = now.slice(0, 10);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
     const totalOrders = db.select({ count: sql<number>`count(*)` }).from(s.orders).get()!.count;
     const todayOrders = db.select({ count: sql<number>`count(*)` }).from(s.orders)

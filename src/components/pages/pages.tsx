@@ -2,6 +2,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -10,6 +12,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Plus,
   Search,
@@ -20,6 +30,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { formatDate } from "@/lib/date-utils";
 
 interface Page {
   id: number;
@@ -28,6 +39,7 @@ interface Page {
   status: string;
   seoTitle: string;
   seoDescription: string;
+  contentJson: string;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -41,12 +53,44 @@ interface Menu {
   updatedAt: string;
 }
 
+interface PageFormData {
+  title: string;
+  slug: string;
+  status: string;
+  seoTitle: string;
+  seoDescription: string;
+  contentJson: string;
+}
+
+interface MenuFormData {
+  name: string;
+  handle: string;
+}
+
 export function PagesPage() {
   const [pages, setPages] = useState<Page[]>([]);
   const [menus, setMenus] = useState<Menu[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"pages" | "menus">("pages");
   const [searchTerm, setSearchTerm] = useState("");
+  const [pageDialogOpen, setPageDialogOpen] = useState(false);
+  const [menuDialogOpen, setMenuDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editingPage, setEditingPage] = useState<Page | null>(null);
+  const [editingMenu, setEditingMenu] = useState<Menu | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ type: "page" | "menu"; id: number; name: string } | null>(null);
+  const [pageForm, setPageForm] = useState<PageFormData>({
+    title: "",
+    slug: "",
+    status: "draft",
+    seoTitle: "",
+    seoDescription: "",
+    contentJson: "{}",
+  });
+  const [menuForm, setMenuForm] = useState<MenuFormData>({
+    name: "",
+    handle: "",
+  });
 
   useEffect(() => {
     fetchPages();
@@ -79,9 +123,150 @@ export function PagesPage() {
     }
   };
 
+  // Page handlers
+  const handleCreatePage = () => {
+    setEditingPage(null);
+    setPageForm({
+      title: "",
+      slug: "",
+      status: "draft",
+      seoTitle: "",
+      seoDescription: "",
+      contentJson: "{}",
+    });
+    setPageDialogOpen(true);
+  };
+
+  const handleEditPage = (page: Page) => {
+    setEditingPage(page);
+    setPageForm({
+      title: page.title,
+      slug: page.slug,
+      status: page.status,
+      seoTitle: page.seoTitle,
+      seoDescription: page.seoDescription,
+      contentJson: page.contentJson,
+    });
+    setPageDialogOpen(true);
+  };
+
+  const handleDeletePage = (page: Page) => {
+    setDeleteTarget({ type: "page", id: page.id, name: page.title });
+    setDeleteDialogOpen(true);
+  };
+
+  const handleSavePage = async () => {
+    try {
+      const slug = pageForm.slug || pageForm.title.toLowerCase().replace(/\s+/g, "-");
+      const data = { ...pageForm, slug };
+
+      if (editingPage) {
+        const response = await fetch(`/api/admin/pages/${editingPage.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+        if (response.ok) {
+          const updated = await response.json();
+          setPages(pages.map((p) => (p.id === editingPage.id ? updated : p)));
+        }
+      } else {
+        const response = await fetch("/api/admin/pages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+        if (response.ok) {
+          const newPage = await response.json();
+          setPages([newPage, ...pages]);
+        }
+      }
+      setPageDialogOpen(false);
+    } catch (error) {
+      console.error("Failed to save page:", error);
+    }
+  };
+
+  // Menu handlers
+  const handleCreateMenu = () => {
+    setEditingMenu(null);
+    setMenuForm({ name: "", handle: "" });
+    setMenuDialogOpen(true);
+  };
+
+  const handleEditMenu = (menu: Menu) => {
+    setEditingMenu(menu);
+    setMenuForm({
+      name: menu.name,
+      handle: menu.handle,
+    });
+    setMenuDialogOpen(true);
+  };
+
+  const handleDeleteMenu = (menu: Menu) => {
+    setDeleteTarget({ type: "menu", id: menu.id, name: menu.name });
+    setDeleteDialogOpen(true);
+  };
+
+  const handleSaveMenu = async () => {
+    try {
+      const handle = menuForm.handle || menuForm.name.toLowerCase().replace(/\s+/g, "-");
+      const data = { ...menuForm, handle };
+
+      if (editingMenu) {
+        const response = await fetch(`/api/admin/menus/${editingMenu.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+        if (response.ok) {
+          const updated = await response.json();
+          setMenus(menus.map((m) => (m.id === editingMenu.id ? updated : m)));
+        }
+      } else {
+        const response = await fetch("/api/admin/menus", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+        if (response.ok) {
+          const newMenu = await response.json();
+          setMenus([newMenu, ...menus]);
+        }
+      }
+      setMenuDialogOpen(false);
+    } catch (error) {
+      console.error("Failed to save menu:", error);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    try {
+      const url = deleteTarget.type === "page"
+        ? `/api/admin/pages/${deleteTarget.id}`
+        : `/api/admin/menus/${deleteTarget.id}`;
+
+      const response = await fetch(url, { method: "DELETE" });
+      if (response.ok) {
+        if (deleteTarget.type === "page") {
+          setPages(pages.filter((p) => p.id !== deleteTarget.id));
+        } else {
+          setMenus(menus.filter((m) => m.id !== deleteTarget.id));
+        }
+        setDeleteDialogOpen(false);
+        setDeleteTarget(null);
+      }
+    } catch (error) {
+      console.error("Failed to delete:", error);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "published":
+      case "active":
         return <Badge variant="success">已发布</Badge>;
       case "draft":
         return <Badge variant="secondary">草稿</Badge>;
@@ -89,6 +274,14 @@ export function PagesPage() {
         return <Badge>{status}</Badge>;
     }
   };
+
+  const filteredPages = pages.filter((page) =>
+    page.title.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredMenus = menus.filter((menu) =>
+    menu.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   if (loading) {
     return (
@@ -107,7 +300,7 @@ export function PagesPage() {
             管理静态页面和导航菜单
           </p>
         </div>
-        <Button>
+        <Button onClick={activeTab === "pages" ? handleCreatePage : handleCreateMenu}>
           <Plus className="mr-2 h-4 w-4" />
           {activeTab === "pages" ? "创建页面" : "创建菜单"}
         </Button>
@@ -119,14 +312,14 @@ export function PagesPage() {
           onClick={() => setActiveTab("pages")}
         >
           <FileText className="mr-2 h-4 w-4" />
-          页面
+          页面 ({pages.length})
         </Button>
         <Button
           variant={activeTab === "menus" ? "default" : "outline"}
           onClick={() => setActiveTab("menus")}
         >
           <MenuIcon className="mr-2 h-4 w-4" />
-          菜单
+          菜单 ({menus.length})
         </Button>
       </div>
 
@@ -153,7 +346,7 @@ export function PagesPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {pages.length > 0 ? (
+            {filteredPages.length > 0 ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -166,7 +359,7 @@ export function PagesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pages.map((page) => (
+                  {filteredPages.map((page) => (
                     <TableRow key={page.id}>
                       <TableCell>
                         <div>
@@ -184,19 +377,17 @@ export function PagesPage() {
                       </TableCell>
                       <TableCell>{getStatusBadge(page.status)}</TableCell>
                       <TableCell>
-                        {page.publishedAt
-                          ? new Date(page.publishedAt).toLocaleDateString()
-                          : "-"}
+                        {formatDate(page.publishedAt)}
                       </TableCell>
                       <TableCell>
-                        {new Date(page.updatedAt).toLocaleDateString()}
+                        {formatDate(page.updatedAt)}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon">
+                          <Button variant="ghost" size="icon" onClick={() => handleEditPage(page)}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon">
+                          <Button variant="ghost" size="icon" onClick={() => handleDeletePage(page)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
@@ -212,7 +403,7 @@ export function PagesPage() {
                 <p className="text-sm text-muted-foreground mb-4">
                   创建您的第一个静态页面
                 </p>
-                <Button>
+                <Button onClick={handleCreatePage}>
                   <Plus className="mr-2 h-4 w-4" />
                   创建页面
                 </Button>
@@ -230,10 +421,20 @@ export function PagesPage() {
                   共 {menus.length} 个菜单
                 </CardDescription>
               </div>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="搜索菜单..."
+                  className="pl-8 w-64"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
             </div>
           </CardHeader>
           <CardContent>
-            {menus.length > 0 ? (
+            {filteredMenus.length > 0 ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -245,7 +446,7 @@ export function PagesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {menus.map((menu) => (
+                  {filteredMenus.map((menu) => (
                     <TableRow key={menu.id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -261,17 +462,17 @@ export function PagesPage() {
                         </code>
                       </TableCell>
                       <TableCell>
-                        {new Date(menu.createdAt).toLocaleDateString()}
+                        {formatDate(menu.createdAt)}
                       </TableCell>
                       <TableCell>
-                        {new Date(menu.updatedAt).toLocaleDateString()}
+                        {formatDate(menu.updatedAt)}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon">
+                          <Button variant="ghost" size="icon" onClick={() => handleEditMenu(menu)}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon">
+                          <Button variant="ghost" size="icon" onClick={() => handleDeleteMenu(menu)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
@@ -287,7 +488,7 @@ export function PagesPage() {
                 <p className="text-sm text-muted-foreground mb-4">
                   创建您的第一个导航菜单
                 </p>
-                <Button>
+                <Button onClick={handleCreateMenu}>
                   <Plus className="mr-2 h-4 w-4" />
                   创建菜单
                 </Button>
@@ -296,6 +497,141 @@ export function PagesPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Page Dialog */}
+      <Dialog open={pageDialogOpen} onOpenChange={setPageDialogOpen}>
+        <DialogContent onClose={() => setPageDialogOpen(false)} className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {editingPage ? "编辑页面" : "创建页面"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingPage ? "修改页面内容" : "创建新的静态页面"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="pageTitle">页面标题</Label>
+              <Input
+                id="pageTitle"
+                value={pageForm.title}
+                onChange={(e) => setPageForm({ ...pageForm, title: e.target.value })}
+                placeholder="输入页面标题"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="pageSlug">URL 标识</Label>
+              <Input
+                id="pageSlug"
+                value={pageForm.slug}
+                onChange={(e) => setPageForm({ ...pageForm, slug: e.target.value })}
+                placeholder="page-slug"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="pageStatus">状态</Label>
+              <select
+                id="pageStatus"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={pageForm.status}
+                onChange={(e) => setPageForm({ ...pageForm, status: e.target.value })}
+              >
+                <option value="draft">草稿</option>
+                <option value="active">已发布</option>
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="seoTitle">SEO 标题</Label>
+              <Input
+                id="seoTitle"
+                value={pageForm.seoTitle}
+                onChange={(e) => setPageForm({ ...pageForm, seoTitle: e.target.value })}
+                placeholder="搜索引擎显示的标题"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="seoDescription">SEO 描述</Label>
+              <Textarea
+                id="seoDescription"
+                value={pageForm.seoDescription}
+                onChange={(e) => setPageForm({ ...pageForm, seoDescription: e.target.value })}
+                placeholder="搜索引擎显示的描述"
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPageDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleSavePage}>
+              {editingPage ? "保存" : "创建"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Menu Dialog */}
+      <Dialog open={menuDialogOpen} onOpenChange={setMenuDialogOpen}>
+        <DialogContent onClose={() => setMenuDialogOpen(false)}>
+          <DialogHeader>
+            <DialogTitle>
+              {editingMenu ? "编辑菜单" : "创建菜单"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingMenu ? "修改菜单信息" : "创建新的导航菜单"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="menuName">菜单名称</Label>
+              <Input
+                id="menuName"
+                value={menuForm.name}
+                onChange={(e) => setMenuForm({ ...menuForm, name: e.target.value })}
+                placeholder="例如: 主导航"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="menuHandle">菜单标识</Label>
+              <Input
+                id="menuHandle"
+                value={menuForm.handle}
+                onChange={(e) => setMenuForm({ ...menuForm, handle: e.target.value })}
+                placeholder="例如: main-nav"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMenuDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleSaveMenu}>
+              {editingMenu ? "保存" : "创建"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent onClose={() => setDeleteDialogOpen(false)}>
+          <DialogHeader>
+            <DialogTitle>确认删除</DialogTitle>
+            <DialogDescription>
+              确定要删除{deleteTarget?.type === "page" ? "页面" : "菜单"} "{deleteTarget?.name}" 吗？此操作不可撤销。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

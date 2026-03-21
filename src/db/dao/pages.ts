@@ -2,6 +2,7 @@ import { eq, and, desc, asc, sql, like, isNull } from "drizzle-orm";
 import { db } from "../index";
 import * as s from "../schema";
 import type { InferInsertModel } from "drizzle-orm";
+import { formatTimestamp } from "./utils";
 
 export const pageDao = {
   findById(id: number) {
@@ -37,12 +38,17 @@ export const pageDao = {
   },
 
   create(data: InferInsertModel<typeof s.pages>) {
-    return db.insert(s.pages).values(data).returning().get();
+    const now = formatTimestamp();
+    return db.insert(s.pages).values({
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.pages>>) {
     return db.update(s.pages)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, updatedAt: formatTimestamp() })
       .where(eq(s.pages.id, id))
       .returning().get();
   },

@@ -10,16 +10,112 @@ import {
   CreditCard,
   Truck,
   Save,
+  Check,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+
+interface ShopSettings {
+  id: number;
+  shopName: string;
+  shopDescription: string;
+  currencyCode: string;
+  locale: string;
+  timezone: string;
+  supportEmail: string;
+  orderPrefix: string;
+  weightUnit: string;
+}
 
 export function SettingsPage() {
+  const [settings, setSettings] = useState<ShopSettings>({
+    id: 1,
+    shopName: "",
+    shopDescription: "",
+    currencyCode: "CNY",
+    locale: "zh-CN",
+    timezone: "Asia/Shanghai",
+    supportEmail: "",
+    orderPrefix: "ORD",
+    weightUnit: "kg",
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const response = await fetch("/api/admin/settings");
+      if (response.ok) {
+        const data = await response.json();
+        if (data) {
+          setSettings(data);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch settings:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaved(false);
+    try {
+      const response = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+      if (response.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+    } catch (error) {
+      console.error("Failed to save settings:", error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChange = (field: keyof ShopSettings, value: string) => {
+    setSettings({ ...settings, [field]: value });
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-muted-foreground">加载中...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">系统设置</h2>
-        <p className="text-muted-foreground">
-          管理您的商店基本设置
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">系统设置</h2>
+          <p className="text-muted-foreground">
+            管理您的商店基本设置
+          </p>
+        </div>
+        <Button onClick={handleSave} disabled={saving}>
+          {saved ? (
+            <>
+              <Check className="mr-2 h-4 w-4" />
+              已保存
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              {saving ? "保存中..." : "保存设置"}
+            </>
+          )}
+        </Button>
       </div>
 
       <div className="grid gap-6">
@@ -39,7 +135,8 @@ export function SettingsPage() {
               <Input
                 id="shopName"
                 placeholder="我的商店"
-                defaultValue="OpenShop"
+                value={settings.shopName}
+                onChange={(e) => handleChange("shopName", e.target.value)}
               />
             </div>
             <div className="grid gap-2">
@@ -48,6 +145,8 @@ export function SettingsPage() {
                 id="shopDescription"
                 placeholder="输入商店描述..."
                 rows={3}
+                value={settings.shopDescription}
+                onChange={(e) => handleChange("shopDescription", e.target.value)}
               />
             </div>
             <div className="grid gap-2">
@@ -56,6 +155,8 @@ export function SettingsPage() {
                 id="supportEmail"
                 type="email"
                 placeholder="support@example.com"
+                value={settings.supportEmail}
+                onChange={(e) => handleChange("supportEmail", e.target.value)}
               />
             </div>
           </CardContent>
@@ -77,8 +178,9 @@ export function SettingsPage() {
                 <Label htmlFor="currency">货币</Label>
                 <select
                   id="currency"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  defaultValue="CNY"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={settings.currencyCode}
+                  onChange={(e) => handleChange("currencyCode", e.target.value)}
                 >
                   <option value="CNY">人民币 (CNY)</option>
                   <option value="USD">美元 (USD)</option>
@@ -91,8 +193,9 @@ export function SettingsPage() {
                 <Label htmlFor="timezone">时区</Label>
                 <select
                   id="timezone"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  defaultValue="Asia/Shanghai"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={settings.timezone}
+                  onChange={(e) => handleChange("timezone", e.target.value)}
                 >
                   <option value="Asia/Shanghai">中国标准时间 (UTC+8)</option>
                   <option value="America/New_York">美国东部时间 (UTC-5)</option>
@@ -106,8 +209,9 @@ export function SettingsPage() {
                 <Label htmlFor="locale">语言</Label>
                 <select
                   id="locale"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  defaultValue="zh-CN"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={settings.locale}
+                  onChange={(e) => handleChange("locale", e.target.value)}
                 >
                   <option value="zh-CN">简体中文</option>
                   <option value="en">English</option>
@@ -118,8 +222,9 @@ export function SettingsPage() {
                 <Label htmlFor="weightUnit">重量单位</Label>
                 <select
                   id="weightUnit"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  defaultValue="kg"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={settings.weightUnit}
+                  onChange={(e) => handleChange("weightUnit", e.target.value)}
                 >
                   <option value="kg">千克 (kg)</option>
                   <option value="g">克 (g)</option>
@@ -147,10 +252,11 @@ export function SettingsPage() {
               <Input
                 id="orderPrefix"
                 placeholder="ORD"
-                defaultValue="ORD"
+                value={settings.orderPrefix}
+                onChange={(e) => handleChange("orderPrefix", e.target.value)}
               />
               <p className="text-sm text-muted-foreground">
-                订单号将以此前缀开头，例如 ORD-00001
+                订单号将以此前缀开头，例如 {settings.orderPrefix}-00001
               </p>
             </div>
             <div className="flex items-center justify-between p-4 border rounded-lg">
@@ -205,14 +311,6 @@ export function SettingsPage() {
             </div>
           </CardContent>
         </Card>
-
-        <div className="flex justify-end gap-4">
-          <Button variant="outline">取消</Button>
-          <Button>
-            <Save className="mr-2 h-4 w-4" />
-            保存设置
-          </Button>
-        </div>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import { eq, and, desc, asc, sql, like, isNull } from "drizzle-orm";
 import { db } from "../index";
 import * as s from "../schema";
 import type { InferInsertModel } from "drizzle-orm";
+import { formatTimestamp } from "./utils";
 
 export const customerDao = {
   findById(id: number) {
@@ -49,12 +50,17 @@ export const customerDao = {
   },
 
   create(data: InferInsertModel<typeof s.customers>) {
-    return db.insert(s.customers).values(data).returning().get();
+    const now = formatTimestamp();
+    return db.insert(s.customers).values({
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.customers>>) {
     return db.update(s.customers)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, updatedAt: formatTimestamp() })
       .where(eq(s.customers.id, id))
       .returning().get();
   },
@@ -75,12 +81,17 @@ export const addressDao = {
   },
 
   create(data: InferInsertModel<typeof s.customerAddresses>) {
-    return db.insert(s.customerAddresses).values(data).returning().get();
+    const now = formatTimestamp();
+    return db.insert(s.customerAddresses).values({
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.customerAddresses>>) {
     return db.update(s.customerAddresses)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, updatedAt: formatTimestamp() })
       .where(eq(s.customerAddresses.id, id))
       .returning().get();
   },

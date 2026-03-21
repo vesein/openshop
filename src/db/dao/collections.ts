@@ -2,6 +2,7 @@ import { eq, and, desc, asc, sql, inArray } from "drizzle-orm";
 import { db } from "../index";
 import * as s from "../schema";
 import type { InferInsertModel } from "drizzle-orm";
+import { formatTimestamp } from "./utils";
 
 // =========================================================
 // Collections
@@ -51,12 +52,17 @@ export const collectionDao = {
   },
 
   create(data: InferInsertModel<typeof s.collections>) {
-    return db.insert(s.collections).values(data).returning().get();
+    const now = formatTimestamp();
+    return db.insert(s.collections).values({
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.collections>>) {
     return db.update(s.collections)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, updatedAt: formatTimestamp() })
       .where(eq(s.collections.id, id))
       .returning().get();
   },
