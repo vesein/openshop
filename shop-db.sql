@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS product_media (
     media_id            INTEGER NOT NULL,
     sort_order          INTEGER NOT NULL DEFAULT 0,
     created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (product_id, media_id),
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
     FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE CASCADE,
     FOREIGN KEY (media_id) REFERENCES media_assets(id) ON DELETE CASCADE
@@ -134,15 +135,6 @@ CREATE TABLE IF NOT EXISTS collections (
     slug                TEXT NOT NULL COLLATE NOCASE UNIQUE,
     status              TEXT NOT NULL DEFAULT 'draft'
                             CHECK (status IN ('draft', 'active', 'archived')),
-    collection_type     TEXT NOT NULL DEFAULT 'manual'
-                            CHECK (collection_type IN ('manual', 'smart')),
-    rules_json          TEXT NOT NULL DEFAULT '[]'
-                            CHECK (
-                                CASE
-                                    WHEN json_valid(rules_json) THEN json_type(rules_json) = 'array'
-                                    ELSE 0
-                                END
-                            ),
     seo_title           TEXT NOT NULL DEFAULT '',
     seo_description     TEXT NOT NULL DEFAULT '',
     published_at        TEXT,
@@ -167,7 +159,6 @@ CREATE TABLE IF NOT EXISTS collection_products (
 CREATE TABLE IF NOT EXISTS inventory_items (
     id                  INTEGER PRIMARY KEY,
     variant_id          INTEGER NOT NULL UNIQUE,
-    sku                 TEXT NOT NULL,
     tracked             INTEGER NOT NULL DEFAULT 1 CHECK (tracked IN (0, 1)),
     allow_backorder     INTEGER NOT NULL DEFAULT 0 CHECK (allow_backorder IN (0, 1)),
     created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -209,11 +200,9 @@ CREATE TABLE IF NOT EXISTS customers (
     first_name          TEXT NOT NULL DEFAULT '',
     last_name           TEXT NOT NULL DEFAULT '',
     accepts_marketing   INTEGER NOT NULL DEFAULT 0 CHECK (accepts_marketing IN (0, 1)),
-    default_address_id  INTEGER,
     created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (email),
-    FOREIGN KEY (default_address_id) REFERENCES customer_addresses(id) ON DELETE SET NULL
+    UNIQUE (email)
 );
 
 CREATE TABLE IF NOT EXISTS customer_addresses (
@@ -277,11 +266,12 @@ CREATE TABLE IF NOT EXISTS orders (
     currency_code       TEXT NOT NULL,
     subtotal_amount     INTEGER NOT NULL DEFAULT 0 CHECK (subtotal_amount >= 0),
     discount_amount     INTEGER NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
+    order_discount_amount INTEGER NOT NULL DEFAULT 0 CHECK (order_discount_amount >= 0),
     shipping_amount     INTEGER NOT NULL DEFAULT 0 CHECK (shipping_amount >= 0),
     tax_amount          INTEGER NOT NULL DEFAULT 0 CHECK (tax_amount >= 0),
     total_amount        INTEGER NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
     payment_status      TEXT NOT NULL DEFAULT 'pending'
-                            CHECK (payment_status IN ('pending', 'authorized', 'paid', 'refunded', 'failed')),
+                            CHECK (payment_status IN ('pending', 'authorized', 'paid', 'partially_refunded', 'refunded', 'failed')),
     fulfillment_status  TEXT NOT NULL DEFAULT 'unfulfilled'
                             CHECK (fulfillment_status IN ('unfulfilled', 'fulfilled', 'returned')),
     order_status        TEXT NOT NULL DEFAULT 'open'
@@ -292,8 +282,7 @@ CREATE TABLE IF NOT EXISTS orders (
     cancelled_at        TEXT,
     created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CHECK (subtotal_amount >= discount_amount),
-    CHECK (total_amount = subtotal_amount - discount_amount + shipping_amount + tax_amount),
+    CHECK (subtotal_amount >= discount_amount + order_discount_amount),
     CHECK (
         CASE
             WHEN json_valid(billing_address_json) THEN json_type(billing_address_json) = 'object'
@@ -306,6 +295,7 @@ CREATE TABLE IF NOT EXISTS orders (
             ELSE 0
         END
     ),
+    CHECK (customer_id IS NOT NULL OR email != ''),
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
 );
 
@@ -322,24 +312,15 @@ CREATE TABLE IF NOT EXISTS order_items (
     compare_at_amount   INTEGER CHECK (compare_at_amount IS NULL OR compare_at_amount >= 0),
     discount_amount     INTEGER NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
     tax_amount          INTEGER NOT NULL DEFAULT 0 CHECK (tax_amount >= 0),
-    line_total_amount   INTEGER NOT NULL DEFAULT 0 CHECK (line_total_amount >= 0),
-    selected_options_json TEXT NOT NULL DEFAULT '{}'
+    snapshot_json       TEXT NOT NULL DEFAULT '{}'
                             CHECK (
                                 CASE
-                                    WHEN json_valid(selected_options_json) THEN json_type(selected_options_json) = 'object'
-                                    ELSE 0
-                                END
-                            ),
-    image_snapshot_json TEXT NOT NULL DEFAULT '{}'
-                            CHECK (
-                                CASE
-                                    WHEN json_valid(image_snapshot_json) THEN json_type(image_snapshot_json) = 'object'
+                                    WHEN json_valid(snapshot_json) THEN json_type(snapshot_json) = 'object'
                                     ELSE 0
                                 END
                             ),
     created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK (quantity * unit_price_amount >= discount_amount),
-    CHECK (line_total_amount = (quantity * unit_price_amount) - discount_amount + tax_amount),
     FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL,
     FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE SET NULL
@@ -350,7 +331,7 @@ CREATE TABLE IF NOT EXISTS payments (
     order_id            INTEGER NOT NULL,
     provider            TEXT NOT NULL,
     provider_payment_id TEXT,
-    amount              INTEGER NOT NULL CHECK (amount >= 0),
+    amount              INTEGER NOT NULL CHECK (amount > 0),
     currency_code       TEXT NOT NULL,
     status              TEXT NOT NULL
                             CHECK (status IN ('pending', 'authorized', 'captured', 'failed', 'refunded')),
@@ -526,6 +507,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_product_variants_option_signature
     ON product_variants(product_id, option_signature)
     WHERE option_signature IS NOT NULL;
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_product_variants_barcode
+    ON product_variants(barcode)
+    WHERE barcode != '';
+
 CREATE INDEX IF NOT EXISTS idx_product_options_product
     ON product_options(product_id, sort_order, id);
 
@@ -606,8 +591,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_payments_provider_payment
     ON payments(provider, provider_payment_id)
     WHERE provider_payment_id IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS idx_shipments_order
-    ON shipments(order_id, created_at DESC);
 
 -- pages / menus
 CREATE INDEX IF NOT EXISTS idx_pages_status_published
@@ -620,8 +603,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_menu_items_menu_id
     ON menu_items(menu_id, id);
 
 -- metafields
-CREATE INDEX IF NOT EXISTS idx_metafield_definitions_resource
-    ON metafield_definitions(resource_type, namespace, key);
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_metafield_definitions_id_resource
     ON metafield_definitions(id, resource_type);
@@ -629,17 +610,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_metafield_definitions_id_resource
 CREATE INDEX IF NOT EXISTS idx_metafield_values_resource
     ON metafield_values(resource_type, resource_id);
 
-CREATE INDEX IF NOT EXISTS idx_metafield_values_definition
-    ON metafield_values(definition_id, resource_id);
-
-CREATE INDEX IF NOT EXISTS idx_metafield_values_text
-    ON metafield_values(definition_id, value_text);
-
-CREATE INDEX IF NOT EXISTS idx_metafield_values_integer
-    ON metafield_values(definition_id, value_integer);
-
-CREATE INDEX IF NOT EXISTS idx_metafield_values_number
-    ON metafield_values(definition_id, value_number);
 
 -- =========================================================
 -- triggers
@@ -682,6 +652,29 @@ BEGIN
         ELSE NULL
     END
     WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_products_archive_on_soft_delete
+BEFORE UPDATE OF deleted_at ON products
+FOR EACH ROW
+WHEN NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL AND NEW.status = 'active'
+BEGIN
+    SELECT RAISE(ABORT, 'set product to draft or archived before soft-deleting');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_products_validate_before_activate_insert
+BEFORE INSERT ON products
+FOR EACH ROW
+WHEN NEW.status = 'active'
+BEGIN
+    SELECT CASE
+        WHEN NOT EXISTS (
+            SELECT 1
+            FROM product_variants
+            WHERE product_id = NEW.id
+        )
+        THEN RAISE(ABORT, 'active product must have at least one variant')
+    END;
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_products_validate_before_activate
@@ -1203,6 +1196,38 @@ BEGIN
     WHERE id IN (OLD.variant_id, NEW.variant_id);
 END;
 
+CREATE TRIGGER IF NOT EXISTS trg_products_validate_featured_media_before_insert
+BEFORE INSERT ON products
+FOR EACH ROW
+WHEN NEW.featured_media_id IS NOT NULL
+BEGIN
+    SELECT CASE
+        WHEN NOT EXISTS (
+            SELECT 1
+            FROM product_media
+            WHERE product_id = NEW.id
+              AND media_id = NEW.featured_media_id
+        )
+        THEN RAISE(ABORT, 'featured media must belong to the product')
+    END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_products_validate_featured_media_before_update
+BEFORE UPDATE OF featured_media_id ON products
+FOR EACH ROW
+WHEN NEW.featured_media_id IS NOT NULL
+BEGIN
+    SELECT CASE
+        WHEN NOT EXISTS (
+            SELECT 1
+            FROM product_media
+            WHERE product_id = NEW.id
+              AND media_id = NEW.featured_media_id
+        )
+        THEN RAISE(ABORT, 'featured media must belong to the product')
+    END;
+END;
+
 CREATE TRIGGER IF NOT EXISTS trg_product_media_validate_before_insert
 BEFORE INSERT ON product_media
 FOR EACH ROW
@@ -1283,37 +1308,6 @@ BEGIN
     END;
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_customers_validate_default_address_before_insert
-BEFORE INSERT ON customers
-FOR EACH ROW
-BEGIN
-    SELECT CASE
-        WHEN NEW.default_address_id IS NOT NULL
-         AND NOT EXISTS (
-            SELECT 1
-            FROM customer_addresses
-            WHERE id = NEW.default_address_id
-              AND customer_id = NEW.id
-         )
-        THEN RAISE(ABORT, 'default address must belong to the same customer')
-    END;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trg_customers_validate_default_address_before_update
-BEFORE UPDATE OF id, default_address_id ON customers
-FOR EACH ROW
-BEGIN
-    SELECT CASE
-        WHEN NEW.default_address_id IS NOT NULL
-         AND NOT EXISTS (
-            SELECT 1
-            FROM customer_addresses
-            WHERE id = NEW.default_address_id
-              AND customer_id = NEW.id
-         )
-        THEN RAISE(ABORT, 'default address must belong to the same customer')
-    END;
-END;
 
 CREATE TRIGGER IF NOT EXISTS trg_customer_addresses_validate_customer_id_before_update
 BEFORE UPDATE OF customer_id ON customer_addresses
@@ -1331,43 +1325,6 @@ BEGIN
     VALUES (NEW.id);
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_inventory_items_normalize_sku_after_insert
-AFTER INSERT ON inventory_items
-FOR EACH ROW
-BEGIN
-    UPDATE inventory_items
-    SET sku = (
-            SELECT sku
-            FROM product_variants
-            WHERE id = NEW.variant_id
-        ),
-        updated_at = CURRENT_TIMESTAMP
-    WHERE id = NEW.id
-      AND sku != (
-            SELECT sku
-            FROM product_variants
-            WHERE id = NEW.variant_id
-        );
-END;
-
-CREATE TRIGGER IF NOT EXISTS trg_inventory_items_normalize_sku_after_update
-AFTER UPDATE OF variant_id, sku ON inventory_items
-FOR EACH ROW
-BEGIN
-    UPDATE inventory_items
-    SET sku = (
-            SELECT sku
-            FROM product_variants
-            WHERE id = NEW.variant_id
-        ),
-        updated_at = CURRENT_TIMESTAMP
-    WHERE id = NEW.id
-      AND sku != (
-            SELECT sku
-            FROM product_variants
-            WHERE id = NEW.variant_id
-        );
-END;
 
 CREATE TRIGGER IF NOT EXISTS trg_inventory_items_validate_variant_id_before_update
 BEFORE UPDATE OF variant_id ON inventory_items
@@ -1426,146 +1383,7 @@ BEGIN
     WHERE inventory_item_id = NEW.id;
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_product_variants_sync_inventory_sku_after_update
-AFTER UPDATE OF sku ON product_variants
-FOR EACH ROW
-BEGIN
-    UPDATE inventory_items
-    SET sku = NEW.sku,
-        updated_at = CURRENT_TIMESTAMP
-    WHERE variant_id = NEW.id
-      AND sku != NEW.sku;
-END;
 
-CREATE TRIGGER IF NOT EXISTS trg_inventory_levels_normalize_after_insert
-AFTER INSERT ON inventory_levels
-FOR EACH ROW
-BEGIN
-    UPDATE inventory_levels
-    SET on_hand = CASE
-                WHEN (
-                    SELECT tracked
-                    FROM inventory_items
-                    WHERE id = NEW.inventory_item_id
-                ) = 0 THEN 0
-                ELSE COALESCE((
-                    SELECT SUM(
-                        CASE
-                            WHEN movement_type IN ('in', 'returned', 'sold', 'adjust') THEN quantity_delta
-                            ELSE 0
-                        END
-                    )
-                    FROM inventory_movements
-                    WHERE inventory_item_id = NEW.inventory_item_id
-                ), 0)
-            END,
-        reserved = CASE
-                WHEN (
-                    SELECT tracked
-                    FROM inventory_items
-                    WHERE id = NEW.inventory_item_id
-                ) = 0 THEN 0
-                ELSE COALESCE((
-                    SELECT SUM(
-                        CASE
-                            WHEN movement_type IN ('reserve', 'release', 'sold') THEN quantity_delta
-                            ELSE 0
-                        END
-                    )
-                    FROM inventory_movements
-                    WHERE inventory_item_id = NEW.inventory_item_id
-                ), 0)
-            END,
-        updated_at = COALESCE((
-                SELECT MAX(created_at)
-                FROM inventory_movements
-                WHERE inventory_item_id = NEW.inventory_item_id
-            ), updated_at)
-    WHERE inventory_item_id = NEW.inventory_item_id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS trg_inventory_levels_normalize_after_update
-AFTER UPDATE OF on_hand, reserved ON inventory_levels
-FOR EACH ROW
-BEGIN
-    UPDATE inventory_levels
-    SET on_hand = CASE
-                WHEN (
-                    SELECT tracked
-                    FROM inventory_items
-                    WHERE id = NEW.inventory_item_id
-                ) = 0 THEN 0
-                ELSE COALESCE((
-                    SELECT SUM(
-                        CASE
-                            WHEN movement_type IN ('in', 'returned', 'sold', 'adjust') THEN quantity_delta
-                            ELSE 0
-                        END
-                    )
-                    FROM inventory_movements
-                    WHERE inventory_item_id = NEW.inventory_item_id
-                ), 0)
-            END,
-        reserved = CASE
-                WHEN (
-                    SELECT tracked
-                    FROM inventory_items
-                    WHERE id = NEW.inventory_item_id
-                ) = 0 THEN 0
-                ELSE COALESCE((
-                    SELECT SUM(
-                        CASE
-                            WHEN movement_type IN ('reserve', 'release', 'sold') THEN quantity_delta
-                            ELSE 0
-                        END
-                    )
-                    FROM inventory_movements
-                    WHERE inventory_item_id = NEW.inventory_item_id
-                ), 0)
-            END,
-        updated_at = COALESCE((
-                SELECT MAX(created_at)
-                FROM inventory_movements
-                WHERE inventory_item_id = NEW.inventory_item_id
-            ), updated_at)
-    WHERE inventory_item_id = NEW.inventory_item_id
-      AND (
-            on_hand != CASE
-                WHEN (
-                    SELECT tracked
-                    FROM inventory_items
-                    WHERE id = NEW.inventory_item_id
-                ) = 0 THEN 0
-                ELSE COALESCE((
-                    SELECT SUM(
-                        CASE
-                            WHEN movement_type IN ('in', 'returned', 'sold', 'adjust') THEN quantity_delta
-                            ELSE 0
-                        END
-                    )
-                    FROM inventory_movements
-                    WHERE inventory_item_id = NEW.inventory_item_id
-                ), 0)
-            END
-            OR reserved != CASE
-                WHEN (
-                    SELECT tracked
-                    FROM inventory_items
-                    WHERE id = NEW.inventory_item_id
-                ) = 0 THEN 0
-                ELSE COALESCE((
-                    SELECT SUM(
-                        CASE
-                            WHEN movement_type IN ('reserve', 'release', 'sold') THEN quantity_delta
-                            ELSE 0
-                        END
-                    )
-                    FROM inventory_movements
-                    WHERE inventory_item_id = NEW.inventory_item_id
-                ), 0)
-            END
-      );
-END;
 
 CREATE TRIGGER IF NOT EXISTS trg_inventory_levels_block_delete
 BEFORE DELETE ON inventory_levels
@@ -1718,7 +1536,7 @@ BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_order_items_block_after_payment_before_update
-BEFORE UPDATE OF order_id, quantity, unit_price_amount, discount_amount, tax_amount, line_total_amount ON order_items
+BEFORE UPDATE OF order_id, quantity, unit_price_amount, discount_amount, tax_amount ON order_items
 FOR EACH ROW
 WHEN EXISTS (
     SELECT 1
@@ -1773,6 +1591,7 @@ BEGIN
                 FROM order_items
                 WHERE order_id = NEW.order_id
             ), 0)
+            - order_discount_amount
             + shipping_amount
             + COALESCE((
                 SELECT SUM(tax_amount)
@@ -1784,7 +1603,7 @@ BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_order_items_refresh_order_after_update
-AFTER UPDATE OF order_id, quantity, unit_price_amount, discount_amount, tax_amount, line_total_amount ON order_items
+AFTER UPDATE OF order_id, quantity, unit_price_amount, discount_amount, tax_amount ON order_items
 FOR EACH ROW
 BEGIN
     UPDATE orders
@@ -1813,6 +1632,7 @@ BEGIN
                 FROM order_items
                 WHERE order_id = orders.id
             ), 0)
+            - order_discount_amount
             + shipping_amount
             + COALESCE((
                 SELECT SUM(tax_amount)
@@ -1853,6 +1673,7 @@ BEGIN
                 FROM order_items
                 WHERE order_id = OLD.order_id
             ), 0)
+            - order_discount_amount
             + shipping_amount
             + COALESCE((
                 SELECT SUM(tax_amount)
@@ -1863,129 +1684,9 @@ BEGIN
     WHERE id = OLD.order_id;
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_orders_normalize_payment_status_after_insert
-AFTER INSERT ON orders
-FOR EACH ROW
-BEGIN
-    UPDATE orders
-    SET payment_status = CASE
-            WHEN COALESCE((
-                SELECT SUM(amount)
-                FROM payments
-                WHERE order_id = NEW.id
-                  AND status = 'refunded'
-            ), 0) >= total_amount
-             AND EXISTS (
-                SELECT 1
-                FROM payments
-                WHERE order_id = NEW.id
-                  AND status = 'refunded'
-            ) THEN 'refunded'
-            WHEN total_amount > 0
-             AND COALESCE((
-                SELECT SUM(amount)
-                FROM payments
-                WHERE order_id = NEW.id
-                  AND status = 'captured'
-            ), 0) >= total_amount THEN 'paid'
-            WHEN EXISTS (
-                SELECT 1
-                FROM payments
-                WHERE order_id = NEW.id
-                  AND status = 'authorized'
-            ) THEN 'authorized'
-            WHEN EXISTS (
-                SELECT 1
-                FROM payments
-                WHERE order_id = NEW.id
-                  AND status = 'pending'
-            ) THEN 'pending'
-            WHEN EXISTS (
-                SELECT 1
-                FROM payments
-                WHERE order_id = NEW.id
-                  AND status = 'failed'
-            ) THEN 'failed'
-            ELSE 'pending'
-        END,
-        fulfillment_status = CASE
-            WHEN EXISTS (
-                SELECT 1
-                FROM shipments
-                WHERE order_id = NEW.id
-                  AND status = 'returned'
-            ) THEN 'returned'
-            WHEN EXISTS (
-                SELECT 1
-                FROM shipments
-                WHERE order_id = NEW.id
-                  AND status IN ('shipped', 'delivered')
-            ) THEN 'fulfilled'
-            ELSE 'unfulfilled'
-        END,
-        updated_at = CURRENT_TIMESTAMP
-    WHERE id = NEW.id
-      AND (
-            payment_status != CASE
-                WHEN COALESCE((
-                    SELECT SUM(amount)
-                    FROM payments
-                    WHERE order_id = NEW.id
-                      AND status = 'refunded'
-                ), 0) >= total_amount
-                 AND EXISTS (
-                    SELECT 1
-                    FROM payments
-                    WHERE order_id = NEW.id
-                      AND status = 'refunded'
-                ) THEN 'refunded'
-                WHEN total_amount > 0
-                 AND COALESCE((
-                    SELECT SUM(amount)
-                    FROM payments
-                    WHERE order_id = NEW.id
-                      AND status = 'captured'
-                ), 0) >= total_amount THEN 'paid'
-                WHEN EXISTS (
-                    SELECT 1
-                    FROM payments
-                    WHERE order_id = NEW.id
-                      AND status = 'authorized'
-                ) THEN 'authorized'
-                WHEN EXISTS (
-                    SELECT 1
-                    FROM payments
-                    WHERE order_id = NEW.id
-                      AND status = 'pending'
-                ) THEN 'pending'
-                WHEN EXISTS (
-                    SELECT 1
-                    FROM payments
-                    WHERE order_id = NEW.id
-                      AND status = 'failed'
-                ) THEN 'failed'
-                ELSE 'pending'
-            END
-            OR fulfillment_status != CASE
-                WHEN EXISTS (
-                    SELECT 1
-                    FROM shipments
-                    WHERE order_id = NEW.id
-                      AND status = 'returned'
-                ) THEN 'returned'
-                WHEN EXISTS (
-                    SELECT 1
-                    FROM shipments
-                    WHERE order_id = NEW.id
-                      AND status IN ('shipped', 'delivered')
-                ) THEN 'fulfilled'
-                ELSE 'unfulfilled'
-            END
-      );
-END;
 
 CREATE TRIGGER IF NOT EXISTS trg_orders_normalize_amounts_after_update
-AFTER UPDATE OF subtotal_amount, discount_amount, tax_amount, total_amount, shipping_amount ON orders
+AFTER UPDATE OF subtotal_amount, discount_amount, order_discount_amount, tax_amount, total_amount, shipping_amount ON orders
 FOR EACH ROW
 WHEN EXISTS (
     SELECT 1
@@ -2019,6 +1720,7 @@ BEGIN
                 FROM order_items
                 WHERE order_id = NEW.id
             ), 0)
+            - order_discount_amount
             + shipping_amount
             + COALESCE((
                 SELECT SUM(tax_amount)
@@ -2053,6 +1755,7 @@ BEGIN
                     FROM order_items
                     WHERE order_id = NEW.id
                 ), 0)
+                - order_discount_amount
                 + shipping_amount
                 + COALESCE((
                     SELECT SUM(tax_amount)
@@ -2063,11 +1766,12 @@ BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_orders_block_amount_changes_after_payment
-BEFORE UPDATE OF subtotal_amount, discount_amount, shipping_amount, tax_amount, total_amount ON orders
+BEFORE UPDATE OF subtotal_amount, discount_amount, order_discount_amount, shipping_amount, tax_amount, total_amount ON orders
 FOR EACH ROW
 WHEN (
         NEW.subtotal_amount != OLD.subtotal_amount
      OR NEW.discount_amount != OLD.discount_amount
+     OR NEW.order_discount_amount != OLD.order_discount_amount
      OR NEW.shipping_amount != OLD.shipping_amount
      OR NEW.tax_amount != OLD.tax_amount
      OR NEW.total_amount != OLD.total_amount
@@ -2100,6 +1804,12 @@ BEGIN
                 WHERE order_id = NEW.id
                   AND status = 'refunded'
             ) THEN 'refunded'
+            WHEN EXISTS (
+                SELECT 1
+                FROM payments
+                WHERE order_id = NEW.id
+                  AND status = 'refunded'
+            ) THEN 'partially_refunded'
             WHEN total_amount > 0
              AND COALESCE((
                 SELECT SUM(amount)
@@ -2142,6 +1852,12 @@ BEGIN
                 WHERE order_id = NEW.id
                   AND status = 'refunded'
             ) THEN 'refunded'
+            WHEN EXISTS (
+                SELECT 1
+                FROM payments
+                WHERE order_id = NEW.id
+                  AND status = 'refunded'
+            ) THEN 'partially_refunded'
             WHEN total_amount > 0
              AND COALESCE((
                 SELECT SUM(amount)
@@ -2169,6 +1885,20 @@ BEGIN
             ) THEN 'failed'
             ELSE 'pending'
         END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_orders_validate_status_transition_before_update
+BEFORE UPDATE OF order_status ON orders
+FOR EACH ROW
+WHEN NEW.order_status != OLD.order_status
+BEGIN
+    SELECT CASE
+        WHEN OLD.order_status = 'open'
+         AND NEW.order_status NOT IN ('completed', 'cancelled')
+        THEN RAISE(ABORT, 'invalid order status transition')
+        WHEN OLD.order_status IN ('completed', 'cancelled')
+        THEN RAISE(ABORT, 'order status is immutable after completion or cancellation')
+    END;
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_orders_normalize_fulfillment_status_after_update
@@ -2246,49 +1976,19 @@ BEGIN
         )
         THEN RAISE(ABORT, 'authorized payments cannot exceed order total')
         WHEN NEW.status = 'refunded'
-         AND EXISTS (
-            SELECT 1
-            FROM payments
-            WHERE order_id = NEW.order_id
-              AND status = 'refunded'
-        )
-        THEN RAISE(ABORT, 'only one refund payment is allowed per order')
-        WHEN NEW.status = 'refunded'
-         AND NEW.amount != (
-            SELECT total_amount
-            FROM orders
-            WHERE id = NEW.order_id
-        )
-        THEN RAISE(ABORT, 'only full refunds are supported')
-        WHEN (
+         AND (
             COALESCE((
-                SELECT SUM(
-                    CASE
-                        WHEN status = 'refunded' THEN amount
-                        ELSE 0
-                    END
-                )
+                SELECT SUM(amount)
                 FROM payments
                 WHERE order_id = NEW.order_id
-            ), 0) + CASE
-                        WHEN NEW.status = 'refunded' THEN NEW.amount
-                        ELSE 0
-                     END
-        ) > (
-            COALESCE((
-                SELECT SUM(
-                    CASE
-                        WHEN status = 'captured' THEN amount
-                        ELSE 0
-                    END
-                )
+                  AND status = 'refunded'
+            ), 0) + NEW.amount
+        ) > COALESCE((
+                SELECT SUM(amount)
                 FROM payments
                 WHERE order_id = NEW.order_id
-            ), 0) + CASE
-                        WHEN NEW.status = 'captured' THEN NEW.amount
-                        ELSE 0
-                     END
-        )
+                  AND status = 'captured'
+            ), 0)
         THEN RAISE(ABORT, 'refunded payments cannot exceed captured payments')
     END;
 END;
@@ -2331,52 +2031,21 @@ BEGIN
         )
         THEN RAISE(ABORT, 'authorized payments cannot exceed order total')
         WHEN NEW.status = 'refunded'
-         AND EXISTS (
-            SELECT 1
-            FROM payments
-            WHERE order_id = NEW.order_id
-              AND status = 'refunded'
-              AND id != OLD.id
-        )
-        THEN RAISE(ABORT, 'only one refund payment is allowed per order')
-        WHEN NEW.status = 'refunded'
-         AND NEW.amount != (
-            SELECT total_amount
-            FROM orders
-            WHERE id = NEW.order_id
-        )
-        THEN RAISE(ABORT, 'only full refunds are supported')
-        WHEN (
+         AND (
             COALESCE((
-                SELECT SUM(
-                    CASE
-                        WHEN status = 'refunded' THEN amount
-                        ELSE 0
-                    END
-                )
+                SELECT SUM(amount)
                 FROM payments
                 WHERE order_id = NEW.order_id
+                  AND status = 'refunded'
                   AND id != OLD.id
-            ), 0) + CASE
-                        WHEN NEW.status = 'refunded' THEN NEW.amount
-                        ELSE 0
-                     END
-        ) > (
-            COALESCE((
-                SELECT SUM(
-                    CASE
-                        WHEN status = 'captured' THEN amount
-                        ELSE 0
-                    END
-                )
+            ), 0) + NEW.amount
+        ) > COALESCE((
+                SELECT SUM(amount)
                 FROM payments
                 WHERE order_id = NEW.order_id
+                  AND status = 'captured'
                   AND id != OLD.id
-            ), 0) + CASE
-                        WHEN NEW.status = 'captured' THEN NEW.amount
-                        ELSE 0
-                     END
-        )
+            ), 0)
         THEN RAISE(ABORT, 'refunded payments cannot exceed captured payments')
     END;
 END;
@@ -2430,6 +2099,12 @@ BEGIN
                 WHERE order_id = NEW.order_id
                   AND status = 'refunded'
             ) THEN 'refunded'
+            WHEN EXISTS (
+                SELECT 1
+                FROM payments
+                WHERE order_id = NEW.order_id
+                  AND status = 'refunded'
+            ) THEN 'partially_refunded'
             WHEN total_amount > 0
              AND COALESCE((
                 SELECT SUM(amount)
@@ -2479,6 +2154,12 @@ BEGIN
                 WHERE order_id = orders.id
                   AND status = 'refunded'
             ) THEN 'refunded'
+            WHEN EXISTS (
+                SELECT 1
+                FROM payments
+                WHERE order_id = orders.id
+                  AND status = 'refunded'
+            ) THEN 'partially_refunded'
             WHEN total_amount > 0
              AND COALESCE((
                 SELECT SUM(amount)
@@ -2528,6 +2209,12 @@ BEGIN
                 WHERE order_id = OLD.order_id
                   AND status = 'refunded'
             ) THEN 'refunded'
+            WHEN EXISTS (
+                SELECT 1
+                FROM payments
+                WHERE order_id = OLD.order_id
+                  AND status = 'refunded'
+            ) THEN 'partially_refunded'
             WHEN total_amount > 0
              AND COALESCE((
                 SELECT SUM(amount)
