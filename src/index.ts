@@ -7,12 +7,15 @@ import {
   variantController, variantDetailController,
   inventoryController, lowStockController,
   inventoryAdjustController,
+  productOptionController, productOptionDetailController,
+  optionValueController, optionValueDetailController,
+  variantOptionValueController,
 } from "./controller/product.controller";
 import {
   orderController, orderDetailController,
   orderItemController, orderItemDetailController,
   paymentController,
-  shipmentController, shipmentActionController,
+  orderShipmentController, shipmentDetailController, shipmentActionController,
   orderDiscountController,
   dashboardController,
 } from "./controller/order.controller";
@@ -35,7 +38,8 @@ import {
   menuItemController, menuItemDetailController,
 } from "./controller/content.controller";
 import {
-  cartController, cartItemController, cartItemDetailController,
+  cartListController, cartController,
+  cartItemController, cartItemDetailController,
 } from "./controller/cart.controller";
 import {
   metafieldDefinitionController, metafieldDefinitionDetailController,
@@ -45,6 +49,7 @@ import {
   mediaController, mediaDetailController,
   productMediaController, productMediaDetailController,
 } from "./controller/media.controller";
+import { settingsController } from "./controller/settings.controller";
 
 const server = serve({
   routes: {
@@ -53,6 +58,9 @@ const server = serve({
 
     // dashboard
     "/api/admin/dashboard": dashboardController,
+
+    // settings
+    "/api/admin/settings": settingsController,
 
     // products
     "/api/admin/products": productController,
@@ -63,14 +71,21 @@ const server = serve({
     "/api/admin/inventory/low-stock": lowStockController,
     "/api/admin/variants/:variantId/inventory/adjust": inventoryAdjustController,
 
+    // product options
+    "/api/admin/products/:productId/options": productOptionController,
+    "/api/admin/product-options/:id": productOptionDetailController,
+    "/api/admin/product-options/:optionId/values": optionValueController,
+    "/api/admin/product-option-values/:id": optionValueDetailController,
+    "/api/admin/variants/:variantId/option-values": variantOptionValueController,
+
     // orders
     "/api/admin/orders": orderController,
     "/api/admin/orders/:id": orderDetailController,
     "/api/admin/orders/:orderId/items": orderItemController,
     "/api/admin/order-items/:id": orderItemDetailController,
     "/api/admin/orders/:orderId/payments": paymentController,
-    "/api/admin/orders/:orderId/shipment": shipmentController,
-    "/api/admin/shipments/:id": shipmentController,
+    "/api/admin/orders/:orderId/shipment": orderShipmentController,
+    "/api/admin/shipments/:id": shipmentDetailController,
     "/api/admin/shipments/:id/:action": shipmentActionController,
     "/api/admin/orders/:orderId/discount-codes": orderDiscountController,
 
@@ -103,12 +118,13 @@ const server = serve({
     "/api/admin/menu-items/:id": menuItemDetailController,
 
     // carts
+    "/api/admin/carts": cartListController,
     "/api/admin/carts/:token": cartController,
     "/api/admin/carts/:cartId/items": cartItemController,
     "/api/admin/cart-items/:id": cartItemDetailController,
 
     // metafields
-    "/api/admin/metafield-definitions/:resourceType": metafieldDefinitionController,
+    "/api/admin/metafield-definitions": metafieldDefinitionController,
     "/api/admin/metafield-definitions/:id": metafieldDefinitionDetailController,
     "/api/admin/metafield-values/:resourceType/:resourceId": metafieldValueController,
     "/api/admin/metafield-values/:id": metafieldValueDetailController,

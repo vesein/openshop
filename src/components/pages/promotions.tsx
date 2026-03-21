@@ -239,10 +239,8 @@ export function PromotionsPage() {
         return <Badge variant="success">进行中</Badge>;
       case "draft":
         return <Badge variant="secondary">草稿</Badge>;
-      case "expired":
-        return <Badge variant="outline">已过期</Badge>;
-      case "scheduled":
-        return <Badge variant="warning">计划中</Badge>;
+      case "archived":
+        return <Badge variant="outline">已归档</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -255,6 +253,8 @@ export function PromotionsPage() {
       case "fixed_amount":
         return <Tag className="h-4 w-4" />;
       case "free_shipping":
+        return <Gift className="h-4 w-4" />;
+      case "bogo":
         return <Gift className="h-4 w-4" />;
       default:
         return <Tag className="h-4 w-4" />;
@@ -269,7 +269,7 @@ export function PromotionsPage() {
         return "固定金额";
       case "free_shipping":
         return "免运费";
-      case "buy_x_get_y":
+      case "bogo":
         return "买赠活动";
       default:
         return type;
@@ -463,7 +463,7 @@ export function PromotionsPage() {
                   <option value="percentage">百分比折扣</option>
                   <option value="fixed_amount">固定金额</option>
                   <option value="free_shipping">免运费</option>
-                  <option value="buy_x_get_y">买赠活动</option>
+                  <option value="bogo">买赠活动</option>
                 </select>
               </div>
               <div className="grid gap-2">
@@ -476,7 +476,7 @@ export function PromotionsPage() {
                 >
                   <option value="draft">草稿</option>
                   <option value="active">进行中</option>
-                  <option value="expired">已过期</option>
+                  <option value="archived">已归档</option>
                 </select>
               </div>
             </div>

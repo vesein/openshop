@@ -1,9 +1,11 @@
-import { productDao, variantDao, inventoryDao } from "../db/dao";
+import { productDao, variantDao, inventoryDao, productOptionDao, productOptionValueDao, variantOptionValueDao } from "../db/dao";
 import type { InferInsertModel } from "drizzle-orm";
-import { products, productVariants } from "../db/schema";
+import { products, productVariants, productOptions, productOptionValues } from "../db/schema";
 
 type ProductInsert = InferInsertModel<typeof products>;
 type VariantInsert = InferInsertModel<typeof productVariants>;
+type ProductOptionInsert = InferInsertModel<typeof productOptions>;
+type ProductOptionValueInsert = InferInsertModel<typeof productOptionValues>;
 
 export const productService = {
   list(opts: { status?: string; search?: string; page?: number; pageSize?: number }) {
@@ -65,5 +67,48 @@ export const productService = {
     note?: string;
   }) {
     return inventoryDao.recordMovement(data);
+  },
+
+  // product options
+  listOptions(productId: number) {
+    return productOptionDao.findByProductId(productId);
+  },
+
+  createOption(data: ProductOptionInsert) {
+    return productOptionDao.create(data);
+  },
+
+  updateOption(id: number, data: Partial<ProductOptionInsert>) {
+    return productOptionDao.update(id, data);
+  },
+
+  deleteOption(id: number) {
+    return productOptionDao.delete(id);
+  },
+
+  // option values
+  listOptionValues(optionId: number) {
+    return productOptionValueDao.findByOptionId(optionId);
+  },
+
+  createOptionValue(data: ProductOptionValueInsert) {
+    return productOptionValueDao.create(data);
+  },
+
+  updateOptionValue(id: number, data: Partial<ProductOptionValueInsert>) {
+    return productOptionValueDao.update(id, data);
+  },
+
+  deleteOptionValue(id: number) {
+    return productOptionValueDao.delete(id);
+  },
+
+  // variant option values
+  listVariantOptionValues(variantId: number) {
+    return variantOptionValueDao.findByVariantId(variantId);
+  },
+
+  replaceVariantOptionValues(variantId: number, optionValueIds: number[]) {
+    return variantOptionValueDao.replace(variantId, optionValueIds);
   },
 };

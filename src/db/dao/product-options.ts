@@ -2,6 +2,7 @@ import { eq, and, asc } from "drizzle-orm";
 import { db } from "../index";
 import * as s from "../schema";
 import type { InferInsertModel } from "drizzle-orm";
+import { formatTimestamp } from "./utils";
 
 // =========================================================
 // Product Options
@@ -21,7 +22,10 @@ export const productOptionDao = {
   },
 
   create(data: InferInsertModel<typeof s.productOptions>) {
-    return db.insert(s.productOptions).values(data).returning().get();
+    return db.insert(s.productOptions).values({
+      ...data,
+      createdAt: formatTimestamp(),
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.productOptions>>) {
@@ -54,7 +58,10 @@ export const productOptionValueDao = {
   },
 
   create(data: InferInsertModel<typeof s.productOptionValues>) {
-    return db.insert(s.productOptionValues).values(data).returning().get();
+    return db.insert(s.productOptionValues).values({
+      ...data,
+      createdAt: formatTimestamp(),
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.productOptionValues>>) {

@@ -57,7 +57,10 @@ export const menuItemDao = {
   },
 
   create(data: InferInsertModel<typeof s.menuItems>) {
-    return db.insert(s.menuItems).values(data).returning().get();
+    return db.insert(s.menuItems).values({
+      ...data,
+      createdAt: formatTimestamp(),
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.menuItems>>) {

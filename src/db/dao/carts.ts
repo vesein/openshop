@@ -2,6 +2,7 @@ import { eq, and, desc, asc, sql } from "drizzle-orm";
 import { db } from "../index";
 import * as s from "../schema";
 import type { InferInsertModel } from "drizzle-orm";
+import { formatTimestamp } from "./utils";
 
 // =========================================================
 // Carts
@@ -38,12 +39,17 @@ export const cartDao = {
   },
 
   create(data: InferInsertModel<typeof s.carts>) {
-    return db.insert(s.carts).values(data).returning().get();
+    const now = formatTimestamp();
+    return db.insert(s.carts).values({
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.carts>>) {
     return db.update(s.carts)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, updatedAt: formatTimestamp() })
       .where(eq(s.carts.id, id))
       .returning().get();
   },
@@ -77,7 +83,7 @@ export const cartItemDao = {
         set: {
           quantity: data.quantity,
           unitPriceAmount: data.unitPriceAmount,
-          updatedAt: new Date().toISOString(),
+          updatedAt: formatTimestamp(),
         },
       })
       .run();
@@ -85,7 +91,7 @@ export const cartItemDao = {
 
   updateQuantity(id: number, quantity: number) {
     return db.update(s.cartItems)
-      .set({ quantity, updatedAt: new Date().toISOString() })
+      .set({ quantity, updatedAt: formatTimestamp() })
       .where(eq(s.cartItems.id, id))
       .returning().get();
   },

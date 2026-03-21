@@ -20,8 +20,21 @@ export const mediaDao = {
       .all();
   },
 
+  count(opts: { kind?: string } = {}) {
+    const conditions = [];
+    if (opts.kind) conditions.push(eq(s.mediaAssets.kind, opts.kind));
+
+    return db.select({ count: sql<number>`count(*)` })
+      .from(s.mediaAssets)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .get()!.count;
+  },
+
   create(data: InferInsertModel<typeof s.mediaAssets>) {
-    return db.insert(s.mediaAssets).values(data).returning().get();
+    return db.insert(s.mediaAssets).values({
+      ...data,
+      createdAt: new Date().toISOString(),
+    }).returning().get();
   },
 
   delete(id: number) {
@@ -49,7 +62,10 @@ export const productMediaDao = {
   },
 
   attach(data: InferInsertModel<typeof s.productMedia>) {
-    return db.insert(s.productMedia).values(data).returning().get();
+    return db.insert(s.productMedia).values({
+      ...data,
+      createdAt: new Date().toISOString(),
+    }).returning().get();
   },
 
   detach(id: number) {

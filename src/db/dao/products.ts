@@ -94,14 +94,25 @@ export const variantDao = {
   },
 
   create(data: InferInsertModel<typeof s.productVariants>) {
-    const variant = db.insert(s.productVariants).values(data).returning().get();
-    db.insert(s.inventoryItems).values({ variantId: variant.id }).run();
-    return variant;
+    const now = formatTimestamp();
+    return db.transaction(() => {
+      const variant = db.insert(s.productVariants).values({
+        ...data,
+        createdAt: now,
+        updatedAt: now,
+      }).returning().get();
+      db.insert(s.inventoryItems).values({
+        variantId: variant.id,
+        createdAt: now,
+        updatedAt: now,
+      }).run();
+      return variant;
+    });
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.productVariants>>) {
     return db.update(s.productVariants)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, updatedAt: formatTimestamp() })
       .where(eq(s.productVariants.id, id))
       .returning().get();
   },
@@ -164,6 +175,6 @@ export const inventoryDao = {
       referenceType: data.referenceType,
       referenceId: data.referenceId,
       note: data.note ?? "",
-    }).run();
+    }).returning().get();
   },
 };

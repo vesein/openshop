@@ -2,6 +2,7 @@ import { eq, and, desc, asc, sql } from "drizzle-orm";
 import { db } from "../index";
 import * as s from "../schema";
 import type { InferInsertModel } from "drizzle-orm";
+import { formatTimestamp } from "./utils";
 
 // =========================================================
 // Metafield Definitions
@@ -30,12 +31,17 @@ export const metafieldDefinitionDao = {
   },
 
   create(data: InferInsertModel<typeof s.metafieldDefinitions>) {
-    return db.insert(s.metafieldDefinitions).values(data).returning().get();
+    const now = formatTimestamp();
+    return db.insert(s.metafieldDefinitions).values({
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.metafieldDefinitions>>) {
     return db.update(s.metafieldDefinitions)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, updatedAt: formatTimestamp() })
       .where(eq(s.metafieldDefinitions.id, id))
       .returning().get();
   },
@@ -105,7 +111,7 @@ export const metafieldValueDao = {
           valueNumber: row.valueNumber,
           valueBoolean: row.valueBoolean,
           valueJson: row.valueJson,
-          updatedAt: new Date().toISOString(),
+          updatedAt: formatTimestamp(),
         },
       })
       .run();

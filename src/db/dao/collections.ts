@@ -111,7 +111,7 @@ export const shopSettingsDao = {
 
   update(data: Partial<InferInsertModel<typeof s.shopSettings>>) {
     return db.update(s.shopSettings)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...data, updatedAt: formatTimestamp() })
       .where(eq(s.shopSettings.id, 1))
       .returning().get();
   },

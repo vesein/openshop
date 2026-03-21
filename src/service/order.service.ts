@@ -1,4 +1,4 @@
-import { orderDao, orderItemDao, paymentDao, shipmentDao, orderDiscountCodeDao } from "../db/dao";
+import { orderDao, orderItemDao, paymentDao, shipmentDao, orderDiscountCodeDao, discountCodeDao } from "../db/dao";
 import type { InferInsertModel } from "drizzle-orm";
 import { orders, orderItems, payments, shipments } from "../db/schema";
 
@@ -11,6 +11,7 @@ export const orderService = {
   list(opts: {
     status?: string;
     paymentStatus?: string;
+    fulfillmentStatus?: string;
     customerId?: number;
     search?: string;
     from?: string;
@@ -19,7 +20,15 @@ export const orderService = {
     pageSize?: number;
   }) {
     const items = orderDao.list(opts);
-    const total = orderDao.count(opts);
+    const total = orderDao.count({
+      status: opts.status,
+      paymentStatus: opts.paymentStatus,
+      fulfillmentStatus: opts.fulfillmentStatus,
+      customerId: opts.customerId,
+      search: opts.search,
+      from: opts.from,
+      to: opts.to,
+    });
     return { items, total, page: opts.page ?? 1, pageSize: opts.pageSize ?? 20 };
   },
 
@@ -101,6 +110,10 @@ export const orderService = {
 
   removeDiscountCode(orderId: number, discountCodeId: number) {
     return orderDiscountCodeDao.remove(orderId, discountCodeId);
+  },
+
+  applyDiscountCodeByCode(orderId: number, code: string) {
+    return discountCodeDao.applyToOrder(orderId, code);
   },
 
   // dashboard

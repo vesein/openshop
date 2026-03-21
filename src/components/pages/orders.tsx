@@ -64,7 +64,9 @@ export function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [paymentFilter, setPaymentFilter] = useState("all");
+  const [fulfillmentFilter, setFulfillmentFilter] = useState("all");
+  const [orderStatusFilter, setOrderStatusFilter] = useState("all");
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -72,13 +74,15 @@ export function OrdersPage() {
 
   useEffect(() => {
     fetchOrders();
-  }, []);
+  }, [paymentFilter, fulfillmentFilter, orderStatusFilter]);
 
   const fetchOrders = async () => {
     try {
       const params = new URLSearchParams();
       if (searchTerm) params.append("search", searchTerm);
-      if (statusFilter !== "all") params.append("status", statusFilter);
+      if (paymentFilter !== "all") params.append("paymentStatus", paymentFilter);
+      if (fulfillmentFilter !== "all") params.append("fulfillmentStatus", fulfillmentFilter);
+      if (orderStatusFilter !== "all") params.append("status", orderStatusFilter);
 
       const response = await fetch(`/api/admin/orders?${params.toString()}`);
       if (response.ok) {
@@ -273,14 +277,33 @@ export function OrdersPage() {
               </div>
               <select
                 className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                value={paymentFilter}
+                onChange={(e) => setPaymentFilter(e.target.value)}
               >
-                <option value="all">全部状态</option>
+                <option value="all">支付状态</option>
                 <option value="pending">待支付</option>
                 <option value="paid">已支付</option>
+                <option value="refunded">已退款</option>
+              </select>
+              <select
+                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={fulfillmentFilter}
+                onChange={(e) => setFulfillmentFilter(e.target.value)}
+              >
+                <option value="all">发货状态</option>
+                <option value="unfulfilled">待发货</option>
                 <option value="fulfilled">已发货</option>
+                <option value="returned">已退货</option>
+              </select>
+              <select
+                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={orderStatusFilter}
+                onChange={(e) => setOrderStatusFilter(e.target.value)}
+              >
+                <option value="all">订单状态</option>
+                <option value="open">进行中</option>
                 <option value="completed">已完成</option>
+                <option value="cancelled">已取消</option>
               </select>
             </div>
           </div>

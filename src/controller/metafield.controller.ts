@@ -3,8 +3,9 @@ import { metafieldService } from "../service/metafield.service";
 
 export const metafieldDefinitionController = {
   GET(req: Request) {
-    const resourceType = req.params.resourceType ?? "";
-    if (!resourceType) return badRequest("resourceType is required");
+    const url = new URL(req.url);
+    const resourceType = url.searchParams.get("resourceType") ?? "";
+    if (!resourceType) return badRequest("resourceType query param is required");
     return json(metafieldService.listDefinitions(resourceType));
   },
 

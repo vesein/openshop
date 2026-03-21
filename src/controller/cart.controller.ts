@@ -1,15 +1,8 @@
 import { json, notFound, badRequest, parseBody } from "./_utils";
 import { cartService } from "../service/cart.service";
 
-export const cartController = {
-  GET(req: Request) {
-    const token = req.params.token ?? "";
-    if (!token) return badRequest("token is required");
-    try {
-      return json(cartService.getByToken(token));
-    } catch { return notFound(); }
-  },
-
+/** POST /api/admin/carts */
+export const cartListController = {
   async POST(req: Request) {
     const body = await parseBody(req) as Record<string, any>;
     if (!body?.sessionToken) return badRequest("sessionToken is required");
@@ -20,20 +13,36 @@ export const cartController = {
       customerId: body.customerId ? Number(body.customerId) : undefined,
     }), 201);
   },
+};
+
+/** GET/PATCH/DELETE /api/admin/carts/:token */
+export const cartController = {
+  GET(req: Request) {
+    const token = req.params.token ?? "";
+    if (!token) return badRequest("token is required");
+    try {
+      return json(cartService.getByToken(token));
+    } catch { return notFound(); }
+  },
 
   async PATCH(req: Request) {
-    const id = Number(req.params.id);
-    const body = await parseBody(req) as Record<string, any>;
-    if (!body) return badRequest("Invalid JSON body");
+    const token = req.params.token ?? "";
     try {
-      return json(cartService.update(id, body));
-    } catch (e: any) { return badRequest(e.message); }
+      const cart = cartService.getByToken(token);
+      const body = await parseBody(req) as Record<string, any>;
+      if (!body) return badRequest("Invalid JSON body");
+      return json(cartService.update(cart.id, body));
+    } catch (e: any) {
+      if (e.message === "Cart not found") return notFound();
+      return badRequest(e.message);
+    }
   },
 
   DELETE(req: Request) {
-    const id = Number(req.params.id);
+    const token = req.params.token ?? "";
     try {
-      return json(cartService.abandon(id));
+      const cart = cartService.getByToken(token);
+      return json(cartService.abandon(cart.id));
     } catch { return notFound(); }
   },
 };

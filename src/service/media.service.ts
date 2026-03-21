@@ -9,7 +9,8 @@ export const mediaService = {
   // media assets
   list(opts: { kind?: string; page?: number; pageSize?: number } = {}) {
     const items = mediaDao.list(opts);
-    return { items, page: opts.page ?? 1, pageSize: opts.pageSize ?? 50 };
+    const total = mediaDao.count({ kind: opts.kind });
+    return { items, total, page: opts.page ?? 1, pageSize: opts.pageSize ?? 50 };
   },
 
   getById(id: number) {

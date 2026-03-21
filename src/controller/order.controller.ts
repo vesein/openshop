@@ -6,7 +6,7 @@ export const orderController = {
     const { page, pageSize } = parsePagination(req);
     const url = new URL(req.url);
     const opts: Record<string, any> = { page, pageSize };
-    for (const k of ["status", "paymentStatus", "search", "from", "to"]) {
+    for (const k of ["status", "paymentStatus", "fulfillmentStatus", "search", "from", "to"]) {
       const v = url.searchParams.get(k);
       if (v) opts[k] = v;
     }
@@ -46,7 +46,10 @@ export const orderItemController = {
 export const orderItemDetailController = {
   async PATCH(req: Request) {
     const body = await parseBody(req);
-    return json(orderService.updateItem(Number(req.params.id), body as any));
+    if (!body) return badRequest("Invalid JSON body");
+    try {
+      return json(orderService.updateItem(Number(req.params.id), body as any));
+    } catch (e: any) { return badRequest(e.message); }
   },
 
   DELETE(req: Request) {
@@ -66,7 +69,8 @@ export const paymentController = {
   },
 };
 
-export const shipmentController = {
+/** GET/POST on /api/admin/orders/:orderId/shipment */
+export const orderShipmentController = {
   GET(req: Request) {
     const s = orderService.getShipment(Number(req.params.orderId));
     return s ? json(s) : notFound();
@@ -76,10 +80,16 @@ export const shipmentController = {
     const body = await parseBody(req);
     return json(orderService.createShipment({ ...body, orderId: Number(req.params.orderId) } as any), 201);
   },
+};
 
+/** PATCH on /api/admin/shipments/:id */
+export const shipmentDetailController = {
   async PATCH(req: Request) {
     const body = await parseBody(req);
-    return json(orderService.updateShipment(Number(req.params.id), body as any));
+    if (!body) return badRequest("Invalid JSON body");
+    try {
+      return json(orderService.updateShipment(Number(req.params.id), body as any));
+    } catch (e: any) { return badRequest(e.message); }
   },
 };
 
@@ -107,11 +117,33 @@ export const orderDiscountController = {
 
   async POST(req: Request) {
     const body = await parseBody(req) as Record<string, any>;
-    if (!body?.discountCodeId || !body?.promotionId) return badRequest("discountCodeId and promotionId required");
+    if (!body) return badRequest("Invalid JSON body");
+    const orderId = Number(req.params.orderId);
+
+    // Support applying by code string (preferred) or by IDs (backward compat)
+    if (body.code) {
+      try {
+        return json(orderService.applyDiscountCodeByCode(orderId, String(body.code)));
+      } catch (e: any) { return badRequest(e.message); }
+    }
+
+    if (!body.discountCodeId || !body.promotionId) {
+      return badRequest("code or (discountCodeId and promotionId) required");
+    }
     return json(orderService.applyDiscountCode(
-      Number(req.params.orderId),
+      orderId,
       Number(body.discountCodeId),
       Number(body.promotionId)
+    ));
+  },
+
+  DELETE(req: Request) {
+    const url = new URL(req.url);
+    const discountCodeId = Number(url.searchParams.get("discountCodeId"));
+    if (!discountCodeId) return badRequest("discountCodeId query param required");
+    return json(orderService.removeDiscountCode(
+      Number(req.params.orderId),
+      discountCodeId
     ));
   },
 };

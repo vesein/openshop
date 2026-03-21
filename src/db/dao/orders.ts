@@ -35,6 +35,7 @@ export const orderDao = {
   list(opts: {
     status?: string;
     paymentStatus?: string;
+    fulfillmentStatus?: string;
     customerId?: number;
     search?: string;
     from?: string;
@@ -46,6 +47,7 @@ export const orderDao = {
     const conditions = [];
     if (opts.status) conditions.push(eq(s.orders.orderStatus, opts.status));
     if (opts.paymentStatus) conditions.push(eq(s.orders.paymentStatus, opts.paymentStatus));
+    if (opts.fulfillmentStatus) conditions.push(eq(s.orders.fulfillmentStatus, opts.fulfillmentStatus));
     if (opts.customerId) conditions.push(eq(s.orders.customerId, opts.customerId));
     if (opts.search) conditions.push(like(s.orders.orderNumber, `%${opts.search}%`));
     if (opts.from) conditions.push(gte(s.orders.createdAt, opts.from));
@@ -60,10 +62,23 @@ export const orderDao = {
       .all();
   },
 
-  count(opts: { status?: string; paymentStatus?: string } = {}) {
+  count(opts: {
+    status?: string;
+    paymentStatus?: string;
+    fulfillmentStatus?: string;
+    customerId?: number;
+    search?: string;
+    from?: string;
+    to?: string;
+  } = {}) {
     const conditions = [];
     if (opts.status) conditions.push(eq(s.orders.orderStatus, opts.status));
     if (opts.paymentStatus) conditions.push(eq(s.orders.paymentStatus, opts.paymentStatus));
+    if (opts.fulfillmentStatus) conditions.push(eq(s.orders.fulfillmentStatus, opts.fulfillmentStatus));
+    if (opts.customerId) conditions.push(eq(s.orders.customerId, opts.customerId));
+    if (opts.search) conditions.push(like(s.orders.orderNumber, `%${opts.search}%`));
+    if (opts.from) conditions.push(gte(s.orders.createdAt, opts.from));
+    if (opts.to) conditions.push(lte(s.orders.createdAt, opts.to));
 
     return db.select({ count: sql<number>`count(*)` })
       .from(s.orders)
@@ -97,7 +112,42 @@ export const orderDao = {
     const revenue = db.select({ sum: sql<number>`coalesce(sum(total_amount), 0)` }).from(s.orders)
       .where(eq(s.orders.paymentStatus, "paid")).get()!.sum;
 
-    return { totalOrders, todayOrders, totalRevenue: revenue };
+    const totalProducts = db.select({ count: sql<number>`count(*)` }).from(s.products)
+      .where(sql`${s.products.deletedAt} IS NULL`).get()!.count;
+
+    const totalCustomers = db.select({ count: sql<number>`count(*)` }).from(s.customers).get()!.count;
+
+    const recentOrders = db.select({
+      id: s.orders.id,
+      orderNumber: s.orders.orderNumber,
+      customerEmail: s.orders.email,
+      totalAmount: s.orders.totalAmount,
+      status: s.orders.orderStatus,
+      createdAt: s.orders.createdAt,
+    }).from(s.orders)
+      .orderBy(desc(s.orders.createdAt))
+      .limit(5)
+      .all();
+
+    const lowStockProducts = db.select({
+      id: s.products.id,
+      title: s.products.title,
+      sku: s.productVariants.sku,
+      quantity: s.inventoryLevels.onHand,
+    })
+    .from(s.inventoryLevels)
+    .innerJoin(s.inventoryItems, eq(s.inventoryLevels.inventoryItemId, s.inventoryItems.id))
+    .innerJoin(s.productVariants, eq(s.inventoryItems.variantId, s.productVariants.id))
+    .innerJoin(s.products, eq(s.productVariants.productId, s.products.id))
+    .where(and(
+      lte(s.inventoryLevels.onHand, 10),
+      sql`${s.products.deletedAt} IS NULL`,
+    ))
+    .orderBy(asc(s.inventoryLevels.onHand))
+    .limit(10)
+    .all();
+
+    return { totalOrders, todayOrders, totalRevenue: revenue, totalProducts, totalCustomers, recentOrders, lowStockProducts };
   },
 };
 
@@ -114,7 +164,10 @@ export const orderItemDao = {
   },
 
   create(data: InferInsertModel<typeof s.orderItems>) {
-    return db.insert(s.orderItems).values(data).returning().get();
+    return db.insert(s.orderItems).values({
+      ...data,
+      createdAt: formatTimestamp(),
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.orderItems>>) {
@@ -144,7 +197,10 @@ export const paymentDao = {
   },
 
   create(data: InferInsertModel<typeof s.payments>) {
-    return db.insert(s.payments).values(data).returning().get();
+    return db.insert(s.payments).values({
+      ...data,
+      createdAt: formatTimestamp(),
+    }).returning().get();
   },
 };
 
@@ -159,7 +215,10 @@ export const shipmentDao = {
   },
 
   create(data: InferInsertModel<typeof s.shipments>) {
-    return db.insert(s.shipments).values(data).returning().get();
+    return db.insert(s.shipments).values({
+      ...data,
+      createdAt: formatTimestamp(),
+    }).returning().get();
   },
 
   update(id: number, data: Partial<InferInsertModel<typeof s.shipments>>) {
@@ -174,7 +233,7 @@ export const shipmentDao = {
       .set({
         ...tracking,
         status: "shipped",
-        shippedAt: new Date().toISOString(),
+        shippedAt: formatTimestamp(),
       })
       .where(eq(s.shipments.id, id))
       .returning().get();
@@ -182,7 +241,7 @@ export const shipmentDao = {
 
   markDelivered(id: number) {
     return db.update(s.shipments)
-      .set({ status: "delivered", deliveredAt: new Date().toISOString() })
+      .set({ status: "delivered", deliveredAt: formatTimestamp() })
       .where(eq(s.shipments.id, id))
       .returning().get();
   },
