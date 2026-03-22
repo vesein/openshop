@@ -27,13 +27,15 @@ import {
   Mail,
   Phone,
   MapPin,
-  Edit,
   Trash2,
-  Plus,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { formatDate, formatDateTime } from "@/lib/date-utils";
+import { Pagination } from "@/components/ui/pagination";
+import { formatDate } from "@/lib/date-utils";
 import { adminApi } from "@/lib/admin-api";
+import { Link } from "wouter";
+import { useLocation } from "wouter";
+import { toast } from "sonner";
 
 interface Customer {
   id: number;
@@ -72,15 +74,16 @@ interface CustomerFormData {
 }
 
 export function CustomersPage() {
+  const [, navigate] = useLocation();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [addressDialogOpen, setAddressDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState<CustomerFormData>({
     email: "",
     phone: "",
@@ -88,37 +91,30 @@ export function CustomersPage() {
     lastName: "",
     acceptsMarketing: 0,
   });
-  const [addressForm, setAddressForm] = useState({
-    firstName: "",
-    lastName: "",
-    company: "",
-    phone: "",
-    countryCode: "CN",
-    province: "",
-    city: "",
-    address1: "",
-    address2: "",
-    postalCode: "",
-    isDefaultShipping: 0,
-    isDefaultBilling: 0,
-  });
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm]);
 
   useEffect(() => {
     void fetchCustomers();
-  }, [searchTerm]);
+  }, [searchTerm, page]);
 
   const fetchCustomers = async () => {
     try {
       const params = new URLSearchParams();
       if (searchTerm) params.append("search", searchTerm);
+      params.append("page", String(page));
+      params.append("pageSize", "20");
 
       const response = await fetch(adminApi.customers(params));
       if (response.ok) {
         const result = await response.json();
         setCustomers(result.items || []);
+        setTotal(result.total || 0);
       }
     } catch (error) {
-      console.error("Failed to fetch customers:", error);
+      toast.error("获取客户失败");
     } finally {
       setLoading(false);
     }
@@ -148,38 +144,26 @@ export function CustomersPage() {
     setDialogOpen(true);
   };
 
-  const handleView = async (customer: Customer) => {
-    try {
-      const response = await fetch(adminApi.customer(customer.id));
-      if (response.ok) {
-        const data = await response.json();
-        setSelectedCustomer(data);
-        setDetailDialogOpen(true);
-      }
-    } catch (error) {
-      console.error("Failed to fetch customer details:", error);
-    }
-  };
-
   const handleDelete = (customer: Customer) => {
-    setSelectedCustomer(customer);
+    setDeletingCustomer(customer);
     setDeleteDialogOpen(true);
   };
 
   const confirmDelete = async () => {
-    if (!selectedCustomer) return;
+    if (!deletingCustomer) return;
 
     try {
-      const response = await fetch(adminApi.customer(selectedCustomer.id), {
+      const response = await fetch(adminApi.customer(deletingCustomer.id), {
         method: "DELETE",
       });
       if (response.ok) {
-        setCustomers(customers.filter((c) => c.id !== selectedCustomer.id));
+        setCustomers(customers.filter((c) => c.id !== deletingCustomer.id));
         setDeleteDialogOpen(false);
-        setSelectedCustomer(null);
+        setDeletingCustomer(null);
+        toast.success("客户已删除");
       }
     } catch (error) {
-      console.error("Failed to delete customer:", error);
+      toast.error("删除客户失败");
     }
   };
 
@@ -194,6 +178,10 @@ export function CustomersPage() {
         if (response.ok) {
           const updated = await response.json();
           setCustomers(customers.map((c) => (c.id === editingCustomer.id ? updated : c)));
+          toast.success("客户已更新");
+        } else {
+          toast.error("更新客户失败");
+          return;
         }
       } else {
         const response = await fetch(adminApi.customers(), {
@@ -204,55 +192,15 @@ export function CustomersPage() {
         if (response.ok) {
           const newCustomer = await response.json();
           setCustomers([newCustomer, ...customers]);
+          toast.success("客户已创建");
+          setDialogOpen(false);
+          navigate(`/customers/${newCustomer.id}`);
+          return;
         }
       }
       setDialogOpen(false);
     } catch (error) {
-      console.error("Failed to save customer:", error);
-    }
-  };
-
-  const handleAddAddress = (customer: Customer) => {
-    setSelectedCustomer(customer);
-    setAddressForm({
-      firstName: customer.firstName,
-      lastName: customer.lastName,
-      company: "",
-      phone: customer.phone,
-      countryCode: "CN",
-      province: "",
-      city: "",
-      address1: "",
-      address2: "",
-      postalCode: "",
-      isDefaultShipping: 0,
-      isDefaultBilling: 0,
-    });
-    setAddressDialogOpen(true);
-  };
-
-  const handleSaveAddress = async () => {
-    if (!selectedCustomer) return;
-
-    try {
-      const response = await fetch(adminApi.customerAddresses(selectedCustomer.id), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(addressForm),
-      });
-      if (response.ok) {
-        setAddressDialogOpen(false);
-        // Refresh customer details if dialog is open
-        if (detailDialogOpen) {
-          const detailResponse = await fetch(adminApi.customer(selectedCustomer.id));
-          if (detailResponse.ok) {
-            const data = await detailResponse.json();
-            setSelectedCustomer(data);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Failed to save address:", error);
+      toast.error("保存客户失败");
     }
   };
 
@@ -346,7 +294,7 @@ export function CustomersPage() {
             <div>
               <CardTitle>客户列表</CardTitle>
               <CardDescription>
-                共 {customers.length} 位客户
+                共 {total} 位客户
               </CardDescription>
             </div>
             <div className="relative">
@@ -443,12 +391,11 @@ export function CustomersPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => handleView(customer)}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleEdit(customer)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
+                          <Link href={`/customers/${customer.id}`}>
+                            <Button variant="ghost" size="icon">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </Link>
                           <Button variant="ghost" size="icon" onClick={() => handleDelete(customer)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -472,6 +419,7 @@ export function CustomersPage() {
               </Button>
             </div>
           )}
+          <Pagination page={page} pageSize={20} total={total} onPageChange={setPage} />
         </CardContent>
       </Card>
 
@@ -547,107 +495,13 @@ export function CustomersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Detail Dialog */}
-      <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
-        <DialogContent onClose={() => setDetailDialogOpen(false)} className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>客户详情</DialogTitle>
-          </DialogHeader>
-          {selectedCustomer && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-muted-foreground">姓名</Label>
-                  <p className="font-medium">{getFullName(selectedCustomer)}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">营销订阅</Label>
-                  <div className="mt-1">
-                    {selectedCustomer.acceptsMarketing === 1 ? (
-                      <Badge variant="success">已订阅</Badge>
-                    ) : (
-                      <Badge variant="secondary">未订阅</Badge>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-muted-foreground">邮箱</Label>
-                  <p>{selectedCustomer.email || "-"}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">电话</Label>
-                  <p>{selectedCustomer.phone || "-"}</p>
-                </div>
-              </div>
-              <div>
-                <Label className="text-muted-foreground">注册时间</Label>
-                <p>{formatDateTime(selectedCustomer.createdAt)}</p>
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <Label className="text-muted-foreground">地址列表</Label>
-                  <Button variant="outline" size="sm" onClick={() => handleAddAddress(selectedCustomer)}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    添加地址
-                  </Button>
-                </div>
-                {selectedCustomer.addresses && selectedCustomer.addresses.length > 0 ? (
-                  <div className="space-y-2">
-                    {selectedCustomer.addresses.map((address) => (
-                      <div key={address.id} className="p-3 border rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">
-                              {address.firstName} {address.lastName}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {[
-                                address.province,
-                                address.city,
-                                address.address1,
-                                address.address2,
-                              ]
-                                .filter(Boolean)
-                                .join(" ")}
-                            </p>
-                            {address.postalCode && (
-                              <p className="text-sm text-muted-foreground">
-                                邮编: {address.postalCode}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex gap-1">
-                            {address.isDefaultShipping === 1 && (
-                              <Badge variant="outline">默认收货</Badge>
-                            )}
-                            {address.isDefaultBilling === 1 && (
-                              <Badge variant="outline">默认账单</Badge>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    暂无地址
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent onClose={() => setDeleteDialogOpen(false)}>
           <DialogHeader>
             <DialogTitle>确认删除</DialogTitle>
             <DialogDescription>
-              确定要删除客户 "{selectedCustomer && getFullName(selectedCustomer)}" 吗？此操作不可撤销。
+              确定要删除客户 "{deletingCustomer && getFullName(deletingCustomer)}" 吗？此操作不可撤销。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -656,118 +510,6 @@ export function CustomersPage() {
             </Button>
             <Button variant="destructive" onClick={confirmDelete}>
               删除
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Address Dialog */}
-      <Dialog open={addressDialogOpen} onOpenChange={setAddressDialogOpen}>
-        <DialogContent onClose={() => setAddressDialogOpen(false)}>
-          <DialogHeader>
-            <DialogTitle>添加地址</DialogTitle>
-            <DialogDescription>
-              为客户 "{selectedCustomer && getFullName(selectedCustomer)}" 添加新地址
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="addressFirstName">姓</Label>
-                <Input
-                  id="addressFirstName"
-                  value={addressForm.firstName}
-                  onChange={(e) => setAddressForm({ ...addressForm, firstName: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="addressLastName">名</Label>
-                <Input
-                  id="addressLastName"
-                  value={addressForm.lastName}
-                  onChange={(e) => setAddressForm({ ...addressForm, lastName: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="addressCompany">公司</Label>
-              <Input
-                id="addressCompany"
-                value={addressForm.company}
-                onChange={(e) => setAddressForm({ ...addressForm, company: e.target.value })}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="addressProvince">省份</Label>
-                <Input
-                  id="addressProvince"
-                  value={addressForm.province}
-                  onChange={(e) => setAddressForm({ ...addressForm, province: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="addressCity">城市</Label>
-                <Input
-                  id="addressCity"
-                  value={addressForm.city}
-                  onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="address1">详细地址</Label>
-              <Input
-                id="address1"
-                value={addressForm.address1}
-                onChange={(e) => setAddressForm({ ...addressForm, address1: e.target.value })}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="addressPostalCode">邮编</Label>
-                <Input
-                  id="addressPostalCode"
-                  value={addressForm.postalCode}
-                  onChange={(e) => setAddressForm({ ...addressForm, postalCode: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="addressPhone">电话</Label>
-                <Input
-                  id="addressPhone"
-                  value={addressForm.phone}
-                  onChange={(e) => setAddressForm({ ...addressForm, phone: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="isDefaultShipping"
-                  checked={addressForm.isDefaultShipping === 1}
-                  onChange={(e) => setAddressForm({ ...addressForm, isDefaultShipping: e.target.checked ? 1 : 0 })}
-                />
-                <Label htmlFor="isDefaultShipping">默认收货地址</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="isDefaultBilling"
-                  checked={addressForm.isDefaultBilling === 1}
-                  onChange={(e) => setAddressForm({ ...addressForm, isDefaultBilling: e.target.checked ? 1 : 0 })}
-                />
-                <Label htmlFor="isDefaultBilling">默认账单地址</Label>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddressDialogOpen(false)}>
-              取消
-            </Button>
-            <Button onClick={handleSaveAddress}>
-              保存
             </Button>
           </DialogFooter>
         </DialogContent>

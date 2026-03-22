@@ -23,54 +23,38 @@ import {
 import {
   Plus,
   Search,
+  Edit,
   Trash2,
-  Package,
-  Eye,
+  FolderOpen,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Pagination } from "@/components/ui/pagination";
 import { formatDate } from "@/lib/date-utils";
 import { adminApi } from "@/lib/admin-api";
-import { Pagination } from "@/components/ui/pagination";
-import { formatMoneyMinorUnits } from "@/lib/money";
-import { Link } from "wouter";
-import { useLocation } from "wouter";
 import { toast } from "sonner";
 
-interface Product {
+interface Collection {
   id: number;
   title: string;
   slug: string;
   status: string;
-  productType: string;
-  vendor: string;
   descriptionHtml: string;
-  publishedAt: string | null;
+  seoTitle: string | null;
+  seoDescription: string | null;
   createdAt: string;
-  variants?: ProductVariant[];
 }
 
-interface ProductVariant {
-  id: number;
-  productId: number;
-  title: string;
-  sku: string;
-  priceAmount: number;
-  compareAtAmount: number | null;
-}
-
-interface ProductFormData {
+interface CollectionFormData {
   title: string;
   slug: string;
   status: string;
-  productType: string;
-  vendor: string;
   descriptionHtml: string;
+  seoTitle: string;
+  seoDescription: string;
 }
 
-export function ProductsPage() {
-  const [, navigate] = useLocation();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [shopCurrency, setShopCurrency] = useState("USD");
+export function CollectionsPage() {
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -78,45 +62,26 @@ export function ProductsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
-  const [formData, setFormData] = useState<ProductFormData>({
+  const [editingCollection, setEditingCollection] = useState<Collection | null>(null);
+  const [deletingCollection, setDeletingCollection] = useState<Collection | null>(null);
+  const [formData, setFormData] = useState<CollectionFormData>({
     title: "",
     slug: "",
     status: "draft",
-    productType: "",
-    vendor: "",
     descriptionHtml: "",
+    seoTitle: "",
+    seoDescription: "",
   });
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await fetch(adminApi.settings);
-        if (!cancelled && r.ok) {
-          const s = (await r.json()) as { currencyCode?: string };
-          const code = typeof s.currencyCode === "string" ? s.currencyCode.trim() : "";
-          if (code) setShopCurrency(code);
-        }
-      } catch {
-        /* 默认 USD */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     setPage(1);
   }, [searchTerm, statusFilter]);
 
   useEffect(() => {
-    void fetchProducts();
+    void fetchCollections();
   }, [searchTerm, statusFilter, page]);
 
-  const fetchProducts = async () => {
+  const fetchCollections = async () => {
     try {
       const params = new URLSearchParams();
       if (searchTerm) params.append("search", searchTerm);
@@ -124,103 +89,97 @@ export function ProductsPage() {
       params.append("page", String(page));
       params.append("pageSize", "20");
 
-      const response = await fetch(adminApi.products(params));
+      const response = await fetch(adminApi.collections(params));
       if (response.ok) {
         const result = await response.json();
-        setProducts(result.items || []);
+        setCollections(result.items || []);
         setTotal(result.total || 0);
       }
     } catch (error) {
-      toast.error("获取商品失败");
+      toast.error("获取商品集合失败");
     } finally {
       setLoading(false);
     }
   };
 
   const handleCreate = () => {
-    setEditingProduct(null);
+    setEditingCollection(null);
     setFormData({
       title: "",
       slug: "",
       status: "draft",
-      productType: "",
-      vendor: "",
       descriptionHtml: "",
+      seoTitle: "",
+      seoDescription: "",
     });
     setDialogOpen(true);
   };
 
-  const handleEdit = (product: Product) => {
-    setEditingProduct(product);
+  const handleEdit = (collection: Collection) => {
+    setEditingCollection(collection);
     setFormData({
-      title: product.title,
-      slug: product.slug,
-      status: product.status,
-      productType: product.productType,
-      vendor: product.vendor,
-      descriptionHtml: product.descriptionHtml,
+      title: collection.title,
+      slug: collection.slug,
+      status: collection.status,
+      descriptionHtml: collection.descriptionHtml || "",
+      seoTitle: collection.seoTitle || "",
+      seoDescription: collection.seoDescription || "",
     });
     setDialogOpen(true);
   };
 
-  const handleDelete = (product: Product) => {
-    setDeletingProduct(product);
+  const handleDelete = (collection: Collection) => {
+    setDeletingCollection(collection);
     setDeleteDialogOpen(true);
   };
 
   const confirmDelete = async () => {
-    if (!deletingProduct) return;
+    if (!deletingCollection) return;
 
     try {
-      const response = await fetch(adminApi.product(deletingProduct.id), {
+      const response = await fetch(adminApi.collection(deletingCollection.id), {
         method: "DELETE",
       });
       if (response.ok) {
-        setProducts(products.filter((p) => p.id !== deletingProduct.id));
+        setCollections(collections.filter((c) => c.id !== deletingCollection.id));
         setDeleteDialogOpen(false);
-        setDeletingProduct(null);
-        toast.success("商品已删除");
+        setDeletingCollection(null);
+        toast.success("商品集合已删除");
       }
     } catch (error) {
-      toast.error("删除商品失败");
+      toast.error("删除商品集合失败");
     }
   };
 
   const handleSubmit = async () => {
     try {
-      if (editingProduct) {
-        const response = await fetch(adminApi.product(editingProduct.id), {
+      if (editingCollection) {
+        const response = await fetch(adminApi.collection(editingCollection.id), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(formData),
         });
         if (response.ok) {
           const updated = await response.json();
-          setProducts(products.map((p) => (p.id === editingProduct.id ? updated : p)));
-          toast.success("商品已更新");
-        } else {
-          toast.error("更新商品失败");
-          return;
+          setCollections(collections.map((c) => (c.id === editingCollection.id ? updated : c)));
+          toast.success("商品集合已更新");
         }
       } else {
         const slug = formData.slug || formData.title.toLowerCase().replace(/\s+/g, "-");
-        const response = await fetch(adminApi.products(), {
+        const response = await fetch(adminApi.collections(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...formData, slug }),
         });
         if (response.ok) {
-          const newProduct = await response.json();
-          setProducts([newProduct, ...products]);
-          toast.success("商品已创建");
-          setDialogOpen(false);
-          navigate(`/products/${newProduct.id}`);
-          return;
+          const newCollection = await response.json();
+          setCollections([newCollection, ...collections]);
+          toast.success("商品集合已创建");
         }
       }
       setDialogOpen(false);
     } catch (error) {
-      toast.error("保存商品失败");
+      toast.error("保存商品集合失败");
     }
   };
 
@@ -249,14 +208,14 @@ export function ProductsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">商品管理</h2>
+          <h2 className="text-3xl font-bold tracking-tight">商品集合</h2>
           <p className="text-muted-foreground">
-            管理您的商品目录和库存
+            管理您的商品集合与分类
           </p>
         </div>
         <Button onClick={handleCreate}>
           <Plus className="mr-2 h-4 w-4" />
-          添加商品
+          创建集合
         </Button>
       </div>
 
@@ -264,9 +223,9 @@ export function ProductsPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>商品列表</CardTitle>
+              <CardTitle>集合列表</CardTitle>
               <CardDescription>
-                共 {total} 个商品
+                共 {total} 个集合
               </CardDescription>
             </div>
             <div className="flex items-center gap-4">
@@ -274,7 +233,7 @@ export function ProductsPage() {
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
-                  placeholder="搜索商品..."
+                  placeholder="搜索集合..."
                   className="pl-8 w-64"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -294,54 +253,42 @@ export function ProductsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {products.length > 0 ? (
+          {collections.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>商品</TableHead>
+                  <TableHead>集合名称</TableHead>
                   <TableHead>状态</TableHead>
-                  <TableHead>类型</TableHead>
-                  <TableHead>供应商</TableHead>
-                  <TableHead>价格</TableHead>
                   <TableHead>创建时间</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {products.map((product) => (
-                  <TableRow key={product.id}>
+                {collections.map((collection) => (
+                  <TableRow key={collection.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center">
-                          <Package className="h-5 w-5 text-muted-foreground" />
+                          <FolderOpen className="h-5 w-5 text-muted-foreground" />
                         </div>
                         <div>
-                          <p className="font-medium">{product.title}</p>
+                          <p className="font-medium">{collection.title}</p>
                           <p className="text-sm text-muted-foreground">
-                            {product.slug}
+                            {collection.slug}
                           </p>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>{getStatusBadge(product.status)}</TableCell>
-                    <TableCell>{product.productType || "-"}</TableCell>
-                    <TableCell>{product.vendor || "-"}</TableCell>
+                    <TableCell>{getStatusBadge(collection.status)}</TableCell>
                     <TableCell>
-                      {product.variants && product.variants.length > 0
-                        ? formatMoneyMinorUnits(product.variants[0]!.priceAmount, shopCurrency)
-                        : "-"}
-                    </TableCell>
-                    <TableCell>
-                      {formatDate(product.createdAt)}
+                      {formatDate(collection.createdAt)}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <Link href={`/products/${product.id}`}>
-                          <Button variant="ghost" size="icon">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </Link>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(product)}>
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(collection)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(collection)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
@@ -352,14 +299,14 @@ export function ProductsPage() {
             </Table>
           ) : (
             <div className="flex flex-col items-center justify-center py-12">
-              <Package className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium">暂无商品</h3>
+              <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium">暂无集合</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                开始添加您的第一个商品
+                创建您的第一个商品集合
               </p>
               <Button onClick={handleCreate}>
                 <Plus className="mr-2 h-4 w-4" />
-                添加商品
+                创建集合
               </Button>
             </div>
           )}
@@ -372,20 +319,20 @@ export function ProductsPage() {
         <DialogContent onClose={() => setDialogOpen(false)}>
           <DialogHeader>
             <DialogTitle>
-              {editingProduct ? "编辑商品" : "添加商品"}
+              {editingCollection ? "编辑集合" : "创建集合"}
             </DialogTitle>
             <DialogDescription>
-              {editingProduct ? "修改商品信息" : "创建新商品"}
+              {editingCollection ? "修改商品集合信息" : "创建新的商品集合"}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="title">商品名称</Label>
+              <Label htmlFor="title">集合名称</Label>
               <Input
                 id="title"
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                placeholder="输入商品名称"
+                placeholder="输入集合名称"
               />
             </div>
             <div className="grid gap-2">
@@ -394,28 +341,8 @@ export function ProductsPage() {
                 id="slug"
                 value={formData.slug}
                 onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                placeholder="product-slug"
+                placeholder="collection-slug"
               />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="productType">商品类型</Label>
-                <Input
-                  id="productType"
-                  value={formData.productType}
-                  onChange={(e) => setFormData({ ...formData, productType: e.target.value })}
-                  placeholder="服装、电子产品等"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="vendor">供应商</Label>
-                <Input
-                  id="vendor"
-                  value={formData.vendor}
-                  onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
-                  placeholder="供应商名称"
-                />
-              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="status">状态</Label>
@@ -431,13 +358,32 @@ export function ProductsPage() {
               </select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="description">商品描述</Label>
+              <Label htmlFor="descriptionHtml">集合描述</Label>
               <Textarea
-                id="description"
+                id="descriptionHtml"
                 value={formData.descriptionHtml}
                 onChange={(e) => setFormData({ ...formData, descriptionHtml: e.target.value })}
-                placeholder="输入商品描述..."
+                placeholder="输入集合描述..."
                 rows={4}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="seoTitle">SEO 标题</Label>
+              <Input
+                id="seoTitle"
+                value={formData.seoTitle}
+                onChange={(e) => setFormData({ ...formData, seoTitle: e.target.value })}
+                placeholder="搜索引擎标题"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="seoDescription">SEO 描述</Label>
+              <Textarea
+                id="seoDescription"
+                value={formData.seoDescription}
+                onChange={(e) => setFormData({ ...formData, seoDescription: e.target.value })}
+                placeholder="搜索引擎描述..."
+                rows={2}
               />
             </div>
           </div>
@@ -446,7 +392,7 @@ export function ProductsPage() {
               取消
             </Button>
             <Button onClick={handleSubmit}>
-              {editingProduct ? "保存" : "创建"}
+              {editingCollection ? "保存" : "创建"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -458,7 +404,7 @@ export function ProductsPage() {
           <DialogHeader>
             <DialogTitle>确认删除</DialogTitle>
             <DialogDescription>
-              确定要删除商品 "{deletingProduct?.title}" 吗？此操作不可撤销。
+              确定要删除商品集合 "{deletingCollection?.title}" 吗？此操作不可撤销。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

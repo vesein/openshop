@@ -6,30 +6,35 @@ import {
   Users,
   Tag,
   FileText,
-  Menu,
   Settings,
   ChevronLeft,
   ChevronRight,
+  FolderOpen,
+  Image as ImageIcon,
 } from "lucide-react";
 import { useState } from "react";
-
-interface SidebarProps {
-  activeItem: string;
-  onItemClick: (item: string) => void;
-}
+import { useLocation } from "wouter";
 
 const menuItems = [
-  { id: "dashboard", label: "仪表盘", icon: LayoutDashboard },
-  { id: "products", label: "商品管理", icon: Package },
-  { id: "orders", label: "订单管理", icon: ShoppingCart },
-  { id: "customers", label: "客户管理", icon: Users },
-  { id: "promotions", label: "促销活动", icon: Tag },
-  { id: "pages", label: "内容管理", icon: FileText },
-  { id: "settings", label: "系统设置", icon: Settings },
+  { href: "/", label: "仪表盘", icon: LayoutDashboard },
+  { href: "/products", label: "商品管理", icon: Package },
+  { href: "/collections", label: "商品集合", icon: FolderOpen },
+  { href: "/orders", label: "订单管理", icon: ShoppingCart },
+  { href: "/customers", label: "客户管理", icon: Users },
+  { href: "/promotions", label: "促销活动", icon: Tag },
+  { href: "/media", label: "媒体库", icon: ImageIcon },
+  { href: "/pages", label: "内容管理", icon: FileText },
+  { href: "/settings", label: "系统设置", icon: Settings },
 ];
 
-export function Sidebar({ activeItem, onItemClick }: SidebarProps) {
+function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const [location, navigate] = useLocation();
+
+  const isActive = (href: string) => {
+    if (href === "/") return location === "/";
+    return location === href || location.startsWith(href + "/");
+  };
 
   return (
     <div
@@ -54,14 +59,14 @@ export function Sidebar({ activeItem, onItemClick }: SidebarProps) {
       <nav className="flex-1 p-2 space-y-1">
         {menuItems.map((item) => {
           const Icon = item.icon;
-          const isActive = activeItem === item.id;
+          const active = isActive(item.href);
 
           return (
             <Button
-              key={item.id}
-              variant={isActive ? "secondary" : "ghost"}
+              key={item.href}
+              variant={active ? "secondary" : "ghost"}
               className={`w-full justify-start ${collapsed ? "px-2" : "px-3"}`}
-              onClick={() => onItemClick(item.id)}
+              onClick={() => navigate(item.href)}
             >
               <Icon size={20} className={collapsed ? "" : "mr-2"} />
               {!collapsed && <span>{item.label}</span>}
@@ -83,14 +88,12 @@ export function Sidebar({ activeItem, onItemClick }: SidebarProps) {
 
 interface LayoutProps {
   children: React.ReactNode;
-  activeItem: string;
-  onItemClick: (item: string) => void;
 }
 
-export function Layout({ children, activeItem, onItemClick }: LayoutProps) {
+export function Layout({ children }: LayoutProps) {
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar activeItem={activeItem} onItemClick={onItemClick} />
+      <Sidebar />
       <main className="flex-1 overflow-auto">
         <div className="p-6">{children}</div>
       </main>

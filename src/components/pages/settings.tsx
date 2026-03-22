@@ -10,9 +10,9 @@ import {
   CreditCard,
   Truck,
   Save,
-  Check,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { adminApi } from "@/lib/admin-api";
 
 interface ShopSettings {
@@ -43,7 +43,6 @@ export function SettingsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -59,7 +58,7 @@ export function SettingsPage() {
         }
       }
     } catch (error) {
-      console.error("Failed to fetch settings:", error);
+      toast.error("获取设置失败");
     } finally {
       setLoading(false);
     }
@@ -67,7 +66,6 @@ export function SettingsPage() {
 
   const handleSave = async () => {
     setSaving(true);
-    setSaved(false);
     try {
       const response = await fetch(adminApi.settings, {
         method: "PATCH",
@@ -86,11 +84,10 @@ export function SettingsPage() {
       if (response.ok) {
         const updated = (await response.json()) as ShopSettings;
         setSettings((prev) => ({ ...prev, ...updated }));
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
+        toast.success("设置已保存");
       }
     } catch (error) {
-      console.error("Failed to save settings:", error);
+      toast.error("保存设置失败");
     } finally {
       setSaving(false);
     }
@@ -118,17 +115,8 @@ export function SettingsPage() {
           </p>
         </div>
         <Button onClick={handleSave} disabled={saving}>
-          {saved ? (
-            <>
-              <Check className="mr-2 h-4 w-4" />
-              已保存
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-4 w-4" />
-              {saving ? "保存中..." : "保存设置"}
-            </>
-          )}
+          <Save className="mr-2 h-4 w-4" />
+          {saving ? "保存中..." : "保存设置"}
         </Button>
       </div>
 

@@ -30,6 +30,8 @@ import {
   Ticket,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Pagination } from "@/components/ui/pagination";
+import { toast } from "sonner";
 import { formatDate } from "@/lib/date-utils";
 import { adminApi } from "@/lib/admin-api";
 
@@ -42,6 +44,7 @@ interface Promotion {
   endsAt: string | null;
   usageLimit: number | null;
   usageCount: number;
+  oncePerCustomer: number;
   rulesJson: string;
   createdAt: string;
   discountCodes?: DiscountCode[];
@@ -56,6 +59,14 @@ interface DiscountCode {
   createdAt: string;
 }
 
+interface RulesData {
+  discountPercent?: string;
+  discountAmount?: string;
+  minPurchaseAmount?: string;
+  buyQuantity?: string;
+  getQuantity?: string;
+}
+
 interface PromotionFormData {
   name: string;
   type: string;
@@ -64,11 +75,50 @@ interface PromotionFormData {
   endsAt: string;
   usageLimit: string;
   rulesJson: string;
+  oncePerCustomer: number;
+  rules: RulesData;
+}
+
+function parseRules(rulesJson: string): RulesData {
+  try {
+    const obj = JSON.parse(rulesJson);
+    return {
+      discountPercent: obj.discountPercent?.toString() ?? "",
+      discountAmount: obj.discountAmount?.toString() ?? "",
+      minPurchaseAmount: obj.minPurchaseAmount?.toString() ?? "",
+      buyQuantity: obj.buyQuantity?.toString() ?? "",
+      getQuantity: obj.getQuantity?.toString() ?? "",
+    };
+  } catch {
+    return {};
+  }
+}
+
+function buildRulesJson(type: string, rules: RulesData): string {
+  const obj: Record<string, unknown> = {};
+  if (rules.minPurchaseAmount) obj.minPurchaseAmount = parseInt(rules.minPurchaseAmount);
+  switch (type) {
+    case "percentage":
+      if (rules.discountPercent) obj.discountPercent = parseFloat(rules.discountPercent);
+      break;
+    case "fixed_amount":
+      if (rules.discountAmount) obj.discountAmount = parseInt(rules.discountAmount);
+      break;
+    case "free_shipping":
+      break;
+    case "bogo":
+      if (rules.buyQuantity) obj.buyQuantity = parseInt(rules.buyQuantity);
+      if (rules.getQuantity) obj.getQuantity = parseInt(rules.getQuantity);
+      break;
+  }
+  return JSON.stringify(obj);
 }
 
 export function PromotionsPage() {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -83,6 +133,8 @@ export function PromotionsPage() {
     endsAt: "",
     usageLimit: "",
     rulesJson: "{}",
+    oncePerCustomer: 0,
+    rules: {},
   });
   const [codeForm, setCodeForm] = useState({
     code: "",
@@ -90,18 +142,27 @@ export function PromotionsPage() {
   });
 
   useEffect(() => {
+    setPage(1);
+  }, [searchTerm]);
+
+  useEffect(() => {
     fetchPromotions();
-  }, []);
+  }, [page]);
 
   const fetchPromotions = async () => {
     try {
-      const response = await fetch(adminApi.promotions);
+      const params = new URLSearchParams();
+      params.append("page", String(page));
+      params.append("pageSize", "20");
+
+      const response = await fetch(adminApi.promotions(params));
       if (response.ok) {
         const result = await response.json();
         setPromotions(result.items || []);
+        setTotal(result.total || 0);
       }
     } catch (error) {
-      console.error("Failed to fetch promotions:", error);
+      toast.error("获取促销活动失败");
     } finally {
       setLoading(false);
     }
@@ -117,6 +178,8 @@ export function PromotionsPage() {
       endsAt: "",
       usageLimit: "",
       rulesJson: "{}",
+      oncePerCustomer: 0,
+      rules: {},
     });
     setDialogOpen(true);
   };
@@ -131,6 +194,8 @@ export function PromotionsPage() {
       endsAt: promotion.endsAt ? (promotion.endsAt.split("T")[0] ?? "") : "",
       usageLimit: promotion.usageLimit?.toString() || "",
       rulesJson: promotion.rulesJson,
+      oncePerCustomer: promotion.oncePerCustomer ?? 0,
+      rules: parseRules(promotion.rulesJson),
     });
     setDialogOpen(true);
   };
@@ -151,16 +216,22 @@ export function PromotionsPage() {
         setPromotions(promotions.filter((p) => p.id !== selectedPromotion.id));
         setDeleteDialogOpen(false);
         setSelectedPromotion(null);
+        toast.success("促销活动已删除");
       }
     } catch (error) {
-      console.error("Failed to delete promotion:", error);
+      toast.error("删除促销活动失败");
     }
   };
 
   const handleSubmit = async () => {
     try {
+      const rulesJson = buildRulesJson(formData.type, formData.rules);
       const data = {
-        ...formData,
+        name: formData.name,
+        type: formData.type,
+        status: formData.status,
+        rulesJson,
+        oncePerCustomer: formData.oncePerCustomer,
         usageLimit: formData.usageLimit ? parseInt(formData.usageLimit) : null,
         startsAt: formData.startsAt || null,
         endsAt: formData.endsAt || null,
@@ -175,9 +246,10 @@ export function PromotionsPage() {
         if (response.ok) {
           const updated = await response.json();
           setPromotions(promotions.map((p) => (p.id === editingPromotion.id ? updated : p)));
+          toast.success("促销活动已更新");
         }
       } else {
-        const response = await fetch(adminApi.promotions, {
+        const response = await fetch(adminApi.promotions(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
@@ -185,11 +257,12 @@ export function PromotionsPage() {
         if (response.ok) {
           const newPromotion = await response.json();
           setPromotions([newPromotion, ...promotions]);
+          toast.success("促销活动已创建");
         }
       }
       setDialogOpen(false);
     } catch (error) {
-      console.error("Failed to save promotion:", error);
+      toast.error("保存促销活动失败");
     }
   };
 
@@ -214,9 +287,10 @@ export function PromotionsPage() {
       if (response.ok) {
         setCodeDialogOpen(false);
         fetchPromotions(); // Refresh to get updated codes
+        toast.success("折扣码已添加");
       }
     } catch (error) {
-      console.error("Failed to save discount code:", error);
+      toast.error("添加折扣码失败");
     }
   };
 
@@ -227,9 +301,10 @@ export function PromotionsPage() {
       });
       if (response.ok) {
         fetchPromotions(); // Refresh to get updated codes
+        toast.success("折扣码已删除");
       }
     } catch (error) {
-      console.error("Failed to delete discount code:", error);
+      toast.error("删除折扣码失败");
     }
   };
 
@@ -442,6 +517,7 @@ export function PromotionsPage() {
               </Button>
             </div>
           )}
+          <Pagination page={page} pageSize={20} total={total} onPageChange={setPage} />
         </CardContent>
       </Card>
 
@@ -524,6 +600,113 @@ export function PromotionsPage() {
                 onChange={(e) => setFormData({ ...formData, usageLimit: e.target.value })}
                 placeholder="留空表示不限制"
               />
+            </div>
+
+            {/* Rules Editor */}
+            <div className="border rounded-lg p-4 space-y-3">
+              <Label className="text-base font-medium">折扣规则</Label>
+
+              {formData.type === "percentage" && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="discountPercent">折扣百分比 (%)</Label>
+                    <Input
+                      id="discountPercent"
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={formData.rules.discountPercent ?? ""}
+                      onChange={(e) => setFormData({ ...formData, rules: { ...formData.rules, discountPercent: e.target.value } })}
+                      placeholder="例如: 20"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="minPurchase">最低消费 (分)</Label>
+                    <Input
+                      id="minPurchase"
+                      type="number"
+                      value={formData.rules.minPurchaseAmount ?? ""}
+                      onChange={(e) => setFormData({ ...formData, rules: { ...formData.rules, minPurchaseAmount: e.target.value } })}
+                      placeholder="留空表示不限制"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {formData.type === "fixed_amount" && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="discountAmount">折扣金额 (分)</Label>
+                    <Input
+                      id="discountAmount"
+                      type="number"
+                      value={formData.rules.discountAmount ?? ""}
+                      onChange={(e) => setFormData({ ...formData, rules: { ...formData.rules, discountAmount: e.target.value } })}
+                      placeholder="例如: 1000 = ¥10"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="minPurchaseFix">最低消费 (分)</Label>
+                    <Input
+                      id="minPurchaseFix"
+                      type="number"
+                      value={formData.rules.minPurchaseAmount ?? ""}
+                      onChange={(e) => setFormData({ ...formData, rules: { ...formData.rules, minPurchaseAmount: e.target.value } })}
+                      placeholder="留空表示不限制"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {formData.type === "free_shipping" && (
+                <div className="grid gap-2">
+                  <Label htmlFor="minPurchaseShip">最低消费 (分)</Label>
+                  <Input
+                    id="minPurchaseShip"
+                    type="number"
+                    value={formData.rules.minPurchaseAmount ?? ""}
+                    onChange={(e) => setFormData({ ...formData, rules: { ...formData.rules, minPurchaseAmount: e.target.value } })}
+                    placeholder="留空表示不限制"
+                  />
+                </div>
+              )}
+
+              {formData.type === "bogo" && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="buyQty">购买数量</Label>
+                    <Input
+                      id="buyQty"
+                      type="number"
+                      min="1"
+                      value={formData.rules.buyQuantity ?? ""}
+                      onChange={(e) => setFormData({ ...formData, rules: { ...formData.rules, buyQuantity: e.target.value } })}
+                      placeholder="例如: 2"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="getQty">赠送数量</Label>
+                    <Input
+                      id="getQty"
+                      type="number"
+                      min="1"
+                      value={formData.rules.getQuantity ?? ""}
+                      onChange={(e) => setFormData({ ...formData, rules: { ...formData.rules, getQuantity: e.target.value } })}
+                      placeholder="例如: 1"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="oncePerCustomer"
+                checked={formData.oncePerCustomer === 1}
+                onChange={(e) => setFormData({ ...formData, oncePerCustomer: e.target.checked ? 1 : 0 })}
+              />
+              <Label htmlFor="oncePerCustomer">每位客户限用一次</Label>
             </div>
           </div>
           <DialogFooter>

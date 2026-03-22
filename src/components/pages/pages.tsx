@@ -30,6 +30,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { formatDate } from "@/lib/date-utils";
 import { adminApi } from "@/lib/admin-api";
 
@@ -100,25 +101,25 @@ export function PagesPage() {
 
   const fetchPages = async () => {
     try {
-      const response = await fetch(adminApi.pages);
+      const response = await fetch(adminApi.pages());
       if (response.ok) {
         const result = await response.json();
         setPages(result.items || []);
       }
     } catch (error) {
-      console.error("Failed to fetch pages:", error);
+      toast.error("获取页面列表失败");
     }
   };
 
   const fetchMenus = async () => {
     try {
-      const response = await fetch(adminApi.menus);
+      const response = await fetch(adminApi.menus());
       if (response.ok) {
         const result = await response.json();
         setMenus(result.items || []);
       }
     } catch (error) {
-      console.error("Failed to fetch menus:", error);
+      toast.error("获取菜单列表失败");
     } finally {
       setLoading(false);
     }
@@ -170,9 +171,10 @@ export function PagesPage() {
         if (response.ok) {
           const updated = await response.json();
           setPages(pages.map((p) => (p.id === editingPage.id ? updated : p)));
+          toast.success("页面已更新");
         }
       } else {
-        const response = await fetch(adminApi.pages, {
+        const response = await fetch(adminApi.pages(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
@@ -180,11 +182,12 @@ export function PagesPage() {
         if (response.ok) {
           const newPage = await response.json();
           setPages([newPage, ...pages]);
+          toast.success("页面已创建");
         }
       }
       setPageDialogOpen(false);
     } catch (error) {
-      console.error("Failed to save page:", error);
+      toast.error("保存页面失败");
     }
   };
 
@@ -223,9 +226,10 @@ export function PagesPage() {
         if (response.ok) {
           const updated = await response.json();
           setMenus(menus.map((m) => (m.id === editingMenu.id ? updated : m)));
+          toast.success("菜单已更新");
         }
       } else {
-        const response = await fetch(adminApi.menus, {
+        const response = await fetch(adminApi.menus(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
@@ -233,11 +237,12 @@ export function PagesPage() {
         if (response.ok) {
           const newMenu = await response.json();
           setMenus([newMenu, ...menus]);
+          toast.success("菜单已创建");
         }
       }
       setMenuDialogOpen(false);
     } catch (error) {
-      console.error("Failed to save menu:", error);
+      toast.error("保存菜单失败");
     }
   };
 
@@ -254,14 +259,16 @@ export function PagesPage() {
       if (response.ok) {
         if (deleteTarget.type === "page") {
           setPages(pages.filter((p) => p.id !== deleteTarget.id));
+          toast.success("页面已删除");
         } else {
           setMenus(menus.filter((m) => m.id !== deleteTarget.id));
+          toast.success("菜单已删除");
         }
         setDeleteDialogOpen(false);
         setDeleteTarget(null);
       }
     } catch (error) {
-      console.error("Failed to delete:", error);
+      toast.error("删除失败");
     }
   };
 

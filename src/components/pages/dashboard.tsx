@@ -10,6 +10,7 @@ import {
   ArrowDownRight,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { adminApi } from "@/lib/admin-api";
 import { formatMoneyMinorUnits } from "@/lib/money";
 
@@ -68,7 +69,7 @@ export function DashboardPage() {
         });
       }
     } catch (error) {
-      console.error("Failed to fetch dashboard data:", error);
+      toast.error("获取仪表盘数据失败");
     } finally {
       setLoading(false);
     }
