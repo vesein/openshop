@@ -30,6 +30,8 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatDate, formatDateTime } from "@/lib/date-utils";
+import { adminApi } from "@/lib/admin-api";
+import { formatMoneyMinorUnits } from "@/lib/money";
 
 interface Order {
   id: number;
@@ -73,8 +75,8 @@ export function OrdersPage() {
   const [newStatus, setNewStatus] = useState({ paymentStatus: "", fulfillmentStatus: "", orderStatus: "" });
 
   useEffect(() => {
-    fetchOrders();
-  }, [paymentFilter, fulfillmentFilter, orderStatusFilter]);
+    void fetchOrders();
+  }, [searchTerm, paymentFilter, fulfillmentFilter, orderStatusFilter]);
 
   const fetchOrders = async () => {
     try {
@@ -84,7 +86,7 @@ export function OrdersPage() {
       if (fulfillmentFilter !== "all") params.append("fulfillmentStatus", fulfillmentFilter);
       if (orderStatusFilter !== "all") params.append("status", orderStatusFilter);
 
-      const response = await fetch(`/api/admin/orders?${params.toString()}`);
+      const response = await fetch(adminApi.orders(params));
       if (response.ok) {
         const result = await response.json();
         setOrders(result.items || []);
@@ -98,7 +100,7 @@ export function OrdersPage() {
 
   const handleView = async (order: Order) => {
     try {
-      const response = await fetch(`/api/admin/orders/${order.id}`);
+      const response = await fetch(adminApi.order(order.id));
       if (response.ok) {
         const data = await response.json();
         setSelectedOrder(data);
@@ -123,7 +125,7 @@ export function OrdersPage() {
     if (!selectedOrder) return;
 
     try {
-      const response = await fetch(`/api/admin/orders/${selectedOrder.id}`, {
+      const response = await fetch(adminApi.order(selectedOrder.id), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newStatus),
@@ -144,8 +146,12 @@ export function OrdersPage() {
         return <Badge variant="success">已支付</Badge>;
       case "pending":
         return <Badge variant="warning">待支付</Badge>;
+      case "partially_paid":
+        return <Badge variant="secondary">部分支付</Badge>;
       case "refunded":
         return <Badge variant="secondary">已退款</Badge>;
+      case "partially_refunded":
+        return <Badge variant="secondary">部分退款</Badge>;
       case "failed":
         return <Badge variant="destructive">支付失败</Badge>;
       default:
@@ -177,13 +183,6 @@ export function OrdersPage() {
       default:
         return <Badge>{status}</Badge>;
     }
-  };
-
-  const formatPrice = (amount: number, currency: string = "CNY") => {
-    return new Intl.NumberFormat("zh-CN", {
-      style: "currency",
-      currency: currency,
-    }).format(amount / 100);
   };
 
   const getOrderStats = () => {
@@ -283,7 +282,9 @@ export function OrdersPage() {
                 <option value="all">支付状态</option>
                 <option value="pending">待支付</option>
                 <option value="paid">已支付</option>
+                <option value="partially_paid">部分支付</option>
                 <option value="refunded">已退款</option>
+                <option value="partially_refunded">部分退款</option>
               </select>
               <select
                 className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -347,7 +348,7 @@ export function OrdersPage() {
                       {getOrderStatusBadge(order.orderStatus)}
                     </TableCell>
                     <TableCell>
-                      {formatPrice(order.totalAmount, order.currencyCode)}
+                      {formatMoneyMinorUnits(order.totalAmount, order.currencyCode)}
                     </TableCell>
                     <TableCell>
                       {formatDate(order.createdAt)}
@@ -424,21 +425,21 @@ export function OrdersPage() {
                 <Label className="text-muted-foreground">订单金额</Label>
                 <div className="grid grid-cols-2 gap-2 mt-1 text-sm">
                   <span>商品小计:</span>
-                  <span className="text-right">{formatPrice(selectedOrder.subtotalAmount)}</span>
+                  <span className="text-right">{formatMoneyMinorUnits(selectedOrder.subtotalAmount, selectedOrder.currencyCode)}</span>
                   {selectedOrder.discountAmount > 0 && (
                     <>
                       <span>折扣:</span>
-                      <span className="text-right text-red-500">-{formatPrice(selectedOrder.discountAmount)}</span>
+                      <span className="text-right text-red-500">-{formatMoneyMinorUnits(selectedOrder.discountAmount, selectedOrder.currencyCode)}</span>
                     </>
                   )}
                   {selectedOrder.taxAmount > 0 && (
                     <>
                       <span>税费:</span>
-                      <span className="text-right">{formatPrice(selectedOrder.taxAmount)}</span>
+                      <span className="text-right">{formatMoneyMinorUnits(selectedOrder.taxAmount, selectedOrder.currencyCode)}</span>
                     </>
                   )}
                   <span className="font-medium">总计:</span>
-                  <span className="text-right font-bold">{formatPrice(selectedOrder.totalAmount)}</span>
+                  <span className="text-right font-bold">{formatMoneyMinorUnits(selectedOrder.totalAmount, selectedOrder.currencyCode)}</span>
                 </div>
               </div>
               {selectedOrder.items && selectedOrder.items.length > 0 && (
@@ -467,9 +468,9 @@ export function OrdersPage() {
                           </TableCell>
                           <TableCell className="font-mono text-sm">{item.sku}</TableCell>
                           <TableCell>{item.quantity}</TableCell>
-                          <TableCell>{formatPrice(item.unitPriceAmount)}</TableCell>
+                          <TableCell>{formatMoneyMinorUnits(item.unitPriceAmount, selectedOrder.currencyCode)}</TableCell>
                           <TableCell className="text-right">
-                            {formatPrice(item.unitPriceAmount * item.quantity)}
+                            {formatMoneyMinorUnits(item.unitPriceAmount * item.quantity, selectedOrder.currencyCode)}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -501,7 +502,9 @@ export function OrdersPage() {
               >
                 <option value="pending">待支付</option>
                 <option value="paid">已支付</option>
+                <option value="partially_paid">部分支付</option>
                 <option value="refunded">已退款</option>
+                <option value="partially_refunded">部分退款</option>
                 <option value="failed">支付失败</option>
               </select>
             </div>

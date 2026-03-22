@@ -1,0 +1,6 @@
+-- inventory_items 上 UPDATE 规则改由应用层 inventory.service.patchInventoryItemByVariantId
+DROP TRIGGER IF EXISTS trg_inventory_items_validate_variant_id_before_update;
+DROP TRIGGER IF EXISTS trg_inventory_items_validate_tracked_before_update;
+DROP TRIGGER IF EXISTS trg_inventory_items_refresh_levels_after_tracked_update;
+DROP TRIGGER IF EXISTS trg_inventory_items_validate_backorder_before_update;
+DROP TRIGGER IF EXISTS trg_inventory_items_updated_at;

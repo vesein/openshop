@@ -1,11 +1,9 @@
-import { json, badRequest, parseBody } from "./_utils";
+import { json, badRequest, parseBody, handleServiceError } from "./_utils";
 import { settingsService } from "../service/settings.service";
 
 export const settingsController = {
   GET() {
-    try {
-      return json(settingsService.get());
-    } catch (e: any) { return json({ error: e.message }, 500); }
+    return json(settingsService.get());
   },
 
   async PATCH(req: Request) {
@@ -13,6 +11,8 @@ export const settingsController = {
     if (!body) return badRequest("Invalid JSON body");
     try {
       return json(settingsService.update(body as any));
-    } catch (e: any) { return badRequest(e.message); }
+    } catch (e) {
+      return handleServiceError(e);
+    }
   },
 };

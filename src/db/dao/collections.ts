@@ -29,6 +29,26 @@ export const collectionDao = {
     return { ...collection, products };
   },
 
+  findBySlug(slug: string) {
+    const collection = db.select().from(s.collections)
+      .where(eq(s.collections.slug, slug)).get();
+    if (!collection) return null;
+    const products = db.select({
+      collectionId: s.collectionProducts.collectionId,
+      productId: s.collectionProducts.productId,
+      sortOrder: s.collectionProducts.sortOrder,
+      productTitle: s.products.title,
+      productSlug: s.products.slug,
+      productStatus: s.products.status,
+    })
+    .from(s.collectionProducts)
+    .innerJoin(s.products, eq(s.collectionProducts.productId, s.products.id))
+    .where(eq(s.collectionProducts.collectionId, collection.id))
+    .orderBy(asc(s.collectionProducts.sortOrder))
+    .all();
+    return { ...collection, products };
+  },
+
   list(opts: { status?: string; page?: number; pageSize?: number } = {}) {
     const { status, page = 1, pageSize = 20 } = opts;
     const conditions = [];
@@ -107,6 +127,19 @@ export const shopSettingsDao = {
   get() {
     return db.select().from(s.shopSettings)
       .where(eq(s.shopSettings.id, 1)).get() ?? null;
+  },
+
+  /** 无行时插入 id=1 的默认行，便于未跑种子的环境启动 */
+  ensure() {
+    const row = shopSettingsDao.get();
+    if (row) return row;
+    const now = formatTimestamp();
+    return db.insert(s.shopSettings).values({
+      id: 1,
+      shopName: "Open Shop",
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
   },
 
   update(data: Partial<InferInsertModel<typeof s.shopSettings>>) {

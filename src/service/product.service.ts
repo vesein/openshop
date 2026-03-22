@@ -1,6 +1,28 @@
-import { productDao, variantDao, inventoryDao, productOptionDao, productOptionValueDao, variantOptionValueDao } from "../db/dao";
+import {
+  productDao,
+  variantDao,
+  inventoryDao,
+  productOptionDao,
+  productOptionValueDao,
+  variantOptionValueDao,
+  metafieldValueDao,
+} from "../db/dao";
+import { db } from "../db/index";
+import { inventoryService } from "./inventory.service";
 import type { InferInsertModel } from "drizzle-orm";
 import { products, productVariants, productOptions, productOptionValues } from "../db/schema";
+import {
+  refreshAllVariantSignaturesForProduct,
+  refreshVariantOptionSignature,
+} from "./product-catalog";
+import {
+  assertCanActivateProduct,
+  assertFeaturedMediaBelongsToProduct,
+  assertProductDraftBeforeOptionEdit,
+  assertProductDraftBeforeVariantEdit,
+  assertProductDraftBeforeVariantOptionEdit,
+  assertSoftDeleteProductAllowed,
+} from "./product-rules";
 
 type ProductInsert = InferInsertModel<typeof products>;
 type VariantInsert = InferInsertModel<typeof productVariants>;
@@ -20,15 +42,30 @@ export const productService = {
     return product;
   },
 
+  getBySlug(slug: string) {
+    const product = productDao.findBySlug(slug);
+    if (!product) throw new Error("Product not found");
+    return product;
+  },
+
   create(data: ProductInsert) {
     return productDao.create(data);
   },
 
   update(id: number, data: Partial<ProductInsert>) {
+    const prev = productDao.findById(id);
+    if (!prev) throw new Error("Product not found");
+    if (data.featuredMediaId !== undefined && data.featuredMediaId != null) {
+      assertFeaturedMediaBelongsToProduct(id, data.featuredMediaId);
+    }
+    if (data.status === "active" && prev.status !== "active") {
+      assertCanActivateProduct(id);
+    }
     return productDao.update(id, data);
   },
 
   delete(id: number) {
+    assertSoftDeleteProductAllowed(id);
     return productDao.softDelete(id);
   },
 
@@ -38,15 +75,33 @@ export const productService = {
   },
 
   createVariant(data: VariantInsert) {
-    return variantDao.create(data);
+    assertProductDraftBeforeVariantEdit(data.productId);
+    const variant = variantDao.create(data);
+    refreshVariantOptionSignature(variant.id);
+    return variant;
   },
 
   updateVariant(id: number, data: Partial<VariantInsert>) {
-    return variantDao.update(id, data);
+    const prev = variantDao.findById(id);
+    if (!prev) throw new Error("Variant not found");
+    if (data.productId != null && data.productId !== prev.productId) {
+      throw new Error(
+        "variant product_id is immutable; recreate the variant under the target product",
+      );
+    }
+    assertProductDraftBeforeVariantEdit(prev.productId);
+    const { optionSignature: _ignored, ...rest } = data as Record<string, unknown>;
+    return variantDao.update(id, rest as Partial<VariantInsert>);
   },
 
   deleteVariant(id: number) {
-    return variantDao.delete(id);
+    const prev = variantDao.findById(id);
+    if (!prev) throw new Error("Variant not found");
+    assertProductDraftBeforeVariantEdit(prev.productId);
+    return db.transaction(() => {
+      metafieldValueDao.deleteByResource("variant", id);
+      return variantDao.delete(id);
+    });
   },
 
   // inventory
@@ -66,7 +121,15 @@ export const productService = {
     referenceId?: number;
     note?: string;
   }) {
-    return inventoryDao.recordMovement(data);
+    return inventoryService.recordStockMovement(data);
+  },
+
+  /** tracked / allow_backorder / variant_id 约束见 inventory.service */
+  updateInventoryItem(
+    variantId: number,
+    data: Partial<{ tracked: number; allowBackorder: number }>,
+  ) {
+    return inventoryService.patchInventoryItemByVariantId(variantId, data);
   },
 
   // product options
@@ -75,15 +138,29 @@ export const productService = {
   },
 
   createOption(data: ProductOptionInsert) {
-    return productOptionDao.create(data);
+    assertProductDraftBeforeOptionEdit(data.productId);
+    const row = productOptionDao.create(data);
+    refreshAllVariantSignaturesForProduct(data.productId);
+    return row;
   },
 
   updateOption(id: number, data: Partial<ProductOptionInsert>) {
+    const opt = productOptionDao.findById(id);
+    if (!opt) throw new Error("Option not found");
+    assertProductDraftBeforeOptionEdit(opt.productId);
+    if (data.productId != null && data.productId !== opt.productId) {
+      assertProductDraftBeforeOptionEdit(data.productId);
+    }
     return productOptionDao.update(id, data);
   },
 
   deleteOption(id: number) {
-    return productOptionDao.delete(id);
+    const opt = productOptionDao.findById(id);
+    if (!opt) throw new Error("Option not found");
+    assertProductDraftBeforeOptionEdit(opt.productId);
+    const out = productOptionDao.delete(id);
+    refreshAllVariantSignaturesForProduct(opt.productId);
+    return out;
   },
 
   // option values
@@ -92,15 +169,30 @@ export const productService = {
   },
 
   createOptionValue(data: ProductOptionValueInsert) {
+    const po = productOptionDao.findById(data.optionId);
+    if (!po) throw new Error("Option not found");
+    assertProductDraftBeforeOptionEdit(po.productId);
     return productOptionValueDao.create(data);
   },
 
   updateOptionValue(id: number, data: Partial<ProductOptionValueInsert>) {
+    const pov = productOptionValueDao.findById(id);
+    if (!pov) throw new Error("Option value not found");
+    const po = productOptionDao.findById(pov.optionId);
+    if (!po) throw new Error("Option not found");
+    assertProductDraftBeforeOptionEdit(po.productId);
     return productOptionValueDao.update(id, data);
   },
 
   deleteOptionValue(id: number) {
-    return productOptionValueDao.delete(id);
+    const pov = productOptionValueDao.findById(id);
+    if (!pov) throw new Error("Option value not found");
+    const po = productOptionDao.findById(pov.optionId);
+    if (!po) throw new Error("Option not found");
+    assertProductDraftBeforeOptionEdit(po.productId);
+    const out = productOptionValueDao.delete(id);
+    refreshAllVariantSignaturesForProduct(po.productId);
+    return out;
   },
 
   // variant option values
@@ -109,6 +201,25 @@ export const productService = {
   },
 
   replaceVariantOptionValues(variantId: number, optionValueIds: number[]) {
-    return variantOptionValueDao.replace(variantId, optionValueIds);
+    const v = variantDao.findById(variantId);
+    if (!v) throw new Error("Variant not found");
+    assertProductDraftBeforeVariantOptionEdit(v.productId);
+
+    const seenOption = new Set<number>();
+    for (const vid of optionValueIds) {
+      const pov = productOptionValueDao.findById(vid);
+      if (!pov) throw new Error(`Option value ${vid} not found`);
+      const po = productOptionDao.findById(pov.optionId);
+      if (!po || po.productId !== v.productId) {
+        throw new Error("variant option value must belong to the same product");
+      }
+      if (seenOption.has(pov.optionId)) {
+        throw new Error("variant already has a value for this option");
+      }
+      seenOption.add(pov.optionId);
+    }
+
+    variantOptionValueDao.replace(variantId, optionValueIds);
+    refreshVariantOptionSignature(variantId);
   },
 };

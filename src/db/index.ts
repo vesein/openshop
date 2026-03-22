@@ -1,30 +1,28 @@
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema";
+import { sqlite } from "./sqlite";
+import { listPendingMigrations, runMigrations } from "./migrate";
 
-const DB_PATH = process.env.DATABASE_URL ?? "data/shop.db";
+/** 默认连接；集成测试可通过 `useSqliteForTests` 临时指向 :memory:，结束时须 `restoreDefaultSqliteFromTests` */
+export let db = drizzle(sqlite, { schema });
 
-// 确保 data 目录存在
-import { mkdirSync } from "node:fs";
-mkdirSync(new URL(".", `file://${process.cwd()}/data/`).pathname, { recursive: true });
-
-const sqlite = new Database(DB_PATH, { create: true });
-
-// PRAGMAs — 每个连接必须执行
-sqlite.exec("PRAGMA journal_mode = WAL");
-sqlite.exec("PRAGMA synchronous = NORMAL");
-sqlite.exec("PRAGMA foreign_keys = ON");
-sqlite.exec("PRAGMA busy_timeout = 5000");
-
-export const db = drizzle(sqlite, { schema });
-
-/**
- * 用原始 SQL 初始化 schema (触发器/索引/CHECK 约束)
- * 适用于首次建库或开发环境
- */
-export function initSchema(sqlPath: string = "docs/shop-db.sql") {
-  const sql = require("node:fs").readFileSync(sqlPath, "utf-8");
-  sqlite.exec(sql);
+/** 仅测试：将 Drizzle 指向给定 SQLite 连接（须已跑迁移） */
+export function useSqliteForTests(database: Database): void {
+  db = drizzle(database, { schema });
 }
 
-export { sqlite };
+/** 仅测试：恢复为 `sqlite.ts` 的默认文件库连接 */
+export function restoreDefaultSqliteFromTests(): void {
+  db = drizzle(sqlite, { schema });
+}
+
+/**
+ * 执行未应用的 migrations/*.sql（基线为 0001_baseline.sql）。
+ * 结构真源在 migrations/，与 Drizzle schema 需手工对齐。
+ */
+export function initSchema() {
+  runMigrations();
+}
+
+export { sqlite, listPendingMigrations, runMigrations };

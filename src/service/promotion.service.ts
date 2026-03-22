@@ -1,9 +1,23 @@
-import { promotionDao, discountCodeDao } from "../db/dao";
+import { promotionDao, discountCodeDao, metafieldValueDao } from "../db/dao";
+import { db } from "../db/index";
 import type { InferInsertModel } from "drizzle-orm";
 import { promotions, discountCodes } from "../db/schema";
 
 type PromotionInsert = InferInsertModel<typeof promotions>;
 type DiscountCodeInsert = InferInsertModel<typeof discountCodes>;
+
+function assertRulesJsonObject(rulesJson: string | undefined) {
+  if (rulesJson === undefined) return;
+  try {
+    const o = JSON.parse(rulesJson);
+    if (typeof o !== "object" || o === null || Array.isArray(o)) {
+      throw new Error("rules_json must be a JSON object");
+    }
+  } catch (e) {
+    if (e instanceof SyntaxError) throw new Error("rules_json must be valid JSON");
+    throw e;
+  }
+}
 
 export const promotionService = {
   list(opts: { status?: string; type?: string; page?: number; pageSize?: number }) {
@@ -23,15 +37,20 @@ export const promotionService = {
   },
 
   create(data: PromotionInsert) {
+    assertRulesJsonObject(data.rulesJson);
     return promotionDao.create(data);
   },
 
   update(id: number, data: Partial<PromotionInsert>) {
+    assertRulesJsonObject(data.rulesJson);
     return promotionDao.update(id, data);
   },
 
   delete(id: number) {
-    return promotionDao.delete(id);
+    return db.transaction(() => {
+      metafieldValueDao.deleteByResource("promotion", id);
+      return promotionDao.delete(id);
+    });
   },
 
   // discount codes

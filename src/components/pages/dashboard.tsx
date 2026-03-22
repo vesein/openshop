@@ -10,17 +10,22 @@ import {
   ArrowDownRight,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { adminApi } from "@/lib/admin-api";
+import { formatMoneyMinorUnits } from "@/lib/money";
 
 interface DashboardData {
   totalProducts?: number;
   totalOrders?: number;
   totalCustomers?: number;
   totalRevenue?: number;
+  /** 店铺默认货币，来自 `shop_settings` */
+  currencyCode?: string;
   recentOrders?: Array<{
     id: number;
     orderNumber: string;
     customerEmail: string;
     totalAmount: number;
+    currencyCode: string;
     status: string;
     createdAt: string;
   }>;
@@ -37,6 +42,7 @@ const defaultData: DashboardData = {
   totalOrders: 0,
   totalCustomers: 0,
   totalRevenue: 0,
+  currencyCode: "USD",
   recentOrders: [],
   lowStockProducts: [],
 };
@@ -51,7 +57,7 @@ export function DashboardPage() {
 
   const fetchDashboardData = async () => {
     try {
-      const response = await fetch("/api/admin/dashboard");
+      const response = await fetch(adminApi.dashboard);
       if (response.ok) {
         const result = await response.json();
         setData({
@@ -67,6 +73,8 @@ export function DashboardPage() {
       setLoading(false);
     }
   };
+
+  const shopCurrency = data.currencyCode ?? "USD";
 
   const stats = [
     {
@@ -92,7 +100,7 @@ export function DashboardPage() {
     },
     {
       title: "总收入",
-      value: `¥${(data.totalRevenue ?? 0).toLocaleString()}`,
+      value: formatMoneyMinorUnits(data.totalRevenue ?? 0, shopCurrency),
       icon: DollarSign,
       trend: "+15%",
       trendUp: true,
@@ -168,7 +176,7 @@ export function DashboardPage() {
                     </div>
                     <div className="text-right">
                       <p className="font-medium">
-                        ¥{order.totalAmount.toLocaleString()}
+                        {formatMoneyMinorUnits(order.totalAmount, order.currencyCode || shopCurrency)}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {new Date(order.createdAt).toLocaleDateString()}
@@ -195,7 +203,7 @@ export function DashboardPage() {
               {(data.lowStockProducts ?? []).length > 0 ? (
                 (data.lowStockProducts ?? []).slice(0, 5).map((product) => (
                   <div
-                    key={product.id}
+                    key={`${product.id}-${product.sku}`}
                     className="flex items-center justify-between border-b pb-2 last:border-0"
                   >
                     <div>
@@ -228,7 +236,7 @@ export function DashboardPage() {
       </div>
 
       <div className="flex gap-4">
-        <Button onClick={() => window.location.reload()}>
+        <Button onClick={() => void fetchDashboardData()}>
           <TrendingUp className="mr-2 h-4 w-4" />
           刷新数据
         </Button>

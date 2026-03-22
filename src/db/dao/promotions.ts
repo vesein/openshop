@@ -51,7 +51,7 @@ export const promotionDao = {
   },
 
   findActive() {
-    const now = new Date().toISOString();
+    const now = formatTimestamp();
     return db.select()
       .from(s.promotions)
       .where(and(
@@ -138,16 +138,4 @@ export const discountCodeDao = {
       .returning().get();
   },
 
-  /** 在订单上应用优惠码 (触发器会验证有效性并自增 usage_count) */
-  applyToOrder(orderId: number, code: string) {
-    const dc = this.findByCode(code);
-    if (!dc) throw new Error(`Discount code "${code}" not found`);
-    if (dc.promoStatus !== "active") throw new Error(`Promotion "${dc.promoName}" is not active`);
-
-    return db.insert(s.orderDiscountCodes).values({
-      orderId,
-      discountCodeId: dc.id,
-      promotionId: dc.promotionId,
-    }).run();
-  },
 };

@@ -13,6 +13,7 @@ import {
   Check,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { adminApi } from "@/lib/admin-api";
 
 interface ShopSettings {
   id: number;
@@ -24,6 +25,8 @@ interface ShopSettings {
   supportEmail: string;
   orderPrefix: string;
   weightUnit: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export function SettingsPage() {
@@ -31,7 +34,7 @@ export function SettingsPage() {
     id: 1,
     shopName: "",
     shopDescription: "",
-    currencyCode: "CNY",
+    currencyCode: "USD",
     locale: "zh-CN",
     timezone: "Asia/Shanghai",
     supportEmail: "",
@@ -48,7 +51,7 @@ export function SettingsPage() {
 
   const fetchSettings = async () => {
     try {
-      const response = await fetch("/api/admin/settings");
+      const response = await fetch(adminApi.settings);
       if (response.ok) {
         const data = await response.json();
         if (data) {
@@ -66,12 +69,23 @@ export function SettingsPage() {
     setSaving(true);
     setSaved(false);
     try {
-      const response = await fetch("/api/admin/settings", {
+      const response = await fetch(adminApi.settings, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
+        body: JSON.stringify({
+          shopName: settings.shopName,
+          shopDescription: settings.shopDescription,
+          currencyCode: settings.currencyCode,
+          locale: settings.locale,
+          timezone: settings.timezone,
+          supportEmail: settings.supportEmail,
+          orderPrefix: settings.orderPrefix,
+          weightUnit: settings.weightUnit,
+        }),
       });
       if (response.ok) {
+        const updated = (await response.json()) as ShopSettings;
+        setSettings((prev) => ({ ...prev, ...updated }));
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
       }

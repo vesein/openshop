@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, like, isNull, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, like, isNull, sql } from "drizzle-orm";
 import { db } from "../index";
 import * as s from "../schema";
 import type { InferInsertModel } from "drizzle-orm";
@@ -16,6 +16,19 @@ export const productDao = {
 
     const variants = db.select().from(s.productVariants)
       .where(eq(s.productVariants.productId, id))
+      .orderBy(asc(s.productVariants.sortOrder)).all();
+
+    return { ...product, variants };
+  },
+
+  findBySlug(slug: string) {
+    const product = db.select().from(s.products)
+      .where(and(eq(s.products.slug, slug), isNull(s.products.deletedAt)))
+      .get();
+    if (!product) return null;
+
+    const variants = db.select().from(s.productVariants)
+      .where(eq(s.productVariants.productId, product.id))
       .orderBy(asc(s.productVariants.sortOrder)).all();
 
     return { ...product, variants };
@@ -101,11 +114,15 @@ export const variantDao = {
         createdAt: now,
         updatedAt: now,
       }).returning().get();
-      db.insert(s.inventoryItems).values({
+      const inv = db.insert(s.inventoryItems).values({
         variantId: variant.id,
         createdAt: now,
         updatedAt: now,
-      }).run();
+      }).returning().get();
+      db.insert(s.inventoryLevels)
+        .values({ inventoryItemId: inv.id })
+        .onConflictDoNothing()
+        .run();
       return variant;
     });
   },
@@ -129,6 +146,26 @@ export const variantDao = {
 // =========================================================
 
 export const inventoryDao = {
+  findItemById(id: number) {
+    return db.select().from(s.inventoryItems).where(eq(s.inventoryItems.id, id)).get() ?? null;
+  },
+
+  findItemByVariantId(variantId: number) {
+    return db.select().from(s.inventoryItems)
+      .where(eq(s.inventoryItems.variantId, variantId))
+      .get() ?? null;
+  },
+
+  updateItem(
+    id: number,
+    data: Partial<Pick<InferInsertModel<typeof s.inventoryItems>, "tracked" | "allowBackorder">>,
+  ) {
+    return db.update(s.inventoryItems)
+      .set({ ...data, updatedAt: formatTimestamp() })
+      .where(eq(s.inventoryItems.id, id))
+      .returning().get();
+  },
+
   getLevel(variantId: number) {
     const row = db.select({
       variantId: s.inventoryItems.variantId,
@@ -154,27 +191,64 @@ export const inventoryDao = {
     .all();
   },
 
-  recordMovement(data: {
-    variantId: number;
-    movementType: string;
-    quantityDelta: number;
-    referenceType?: string;
-    referenceId?: number;
-    note?: string;
-  }) {
-    const item = db.select({ id: s.inventoryItems.id })
-      .from(s.inventoryItems)
-      .where(eq(s.inventoryItems.variantId, data.variantId))
-      .get();
-    if (!item) throw new Error(`No inventory item for variant ${data.variantId}`);
+  updateLevel(
+    inventoryItemId: number,
+    patch: { onHand?: number; reserved?: number },
+  ) {
+    return db.update(s.inventoryLevels)
+      .set({ ...patch, updatedAt: formatTimestamp() })
+      .where(eq(s.inventoryLevels.inventoryItemId, inventoryItemId))
+      .returning().get();
+  },
+};
 
+// =========================================================
+// Inventory movements（流水；数量与库存层一致性由上层或服务保证）
+// =========================================================
+
+export const inventoryMovementDao = {
+  findById(id: number) {
+    return db.select().from(s.inventoryMovements)
+      .where(eq(s.inventoryMovements.id, id)).get() ?? null;
+  },
+
+  /** 重算 inventory_levels 时需聚合该 item 的全部流水，勿加 limit。 */
+  findAllByInventoryItemId(inventoryItemId: number) {
+    return db.select().from(s.inventoryMovements)
+      .where(eq(s.inventoryMovements.inventoryItemId, inventoryItemId))
+      .all();
+  },
+
+  findByInventoryItemId(
+    inventoryItemId: number,
+    opts: { limit?: number } = {},
+  ) {
+    const lim = opts.limit ?? 100;
+    return db.select().from(s.inventoryMovements)
+      .where(eq(s.inventoryMovements.inventoryItemId, inventoryItemId))
+      .orderBy(desc(s.inventoryMovements.createdAt))
+      .limit(lim)
+      .all();
+  },
+
+  findByVariantId(variantId: number, opts: { limit?: number } = {}) {
+    const item = db.select({ id: s.inventoryItems.id }).from(s.inventoryItems)
+      .where(eq(s.inventoryItems.variantId, variantId))
+      .get();
+    if (!item) return [];
+    const lim = opts.limit ?? 100;
+    return db.select().from(s.inventoryMovements)
+      .where(eq(s.inventoryMovements.inventoryItemId, item.id))
+      .orderBy(desc(s.inventoryMovements.createdAt))
+      .limit(lim)
+      .all();
+  },
+
+  create(data: InferInsertModel<typeof s.inventoryMovements>) {
+    const now = formatTimestamp();
     return db.insert(s.inventoryMovements).values({
-      inventoryItemId: item.id,
-      movementType: data.movementType,
-      quantityDelta: data.quantityDelta,
-      referenceType: data.referenceType,
-      referenceId: data.referenceId,
-      note: data.note ?? "",
+      ...data,
+      createdAt: now,
     }).returning().get();
   },
 };

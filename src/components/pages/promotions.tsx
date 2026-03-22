@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatDate } from "@/lib/date-utils";
+import { adminApi } from "@/lib/admin-api";
 
 interface Promotion {
   id: number;
@@ -94,7 +95,7 @@ export function PromotionsPage() {
 
   const fetchPromotions = async () => {
     try {
-      const response = await fetch("/api/admin/promotions");
+      const response = await fetch(adminApi.promotions);
       if (response.ok) {
         const result = await response.json();
         setPromotions(result.items || []);
@@ -143,7 +144,7 @@ export function PromotionsPage() {
     if (!selectedPromotion) return;
 
     try {
-      const response = await fetch(`/api/admin/promotions/${selectedPromotion.id}`, {
+      const response = await fetch(adminApi.promotion(selectedPromotion.id), {
         method: "DELETE",
       });
       if (response.ok) {
@@ -166,7 +167,7 @@ export function PromotionsPage() {
       };
 
       if (editingPromotion) {
-        const response = await fetch(`/api/admin/promotions/${editingPromotion.id}`, {
+        const response = await fetch(adminApi.promotion(editingPromotion.id), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
@@ -176,7 +177,7 @@ export function PromotionsPage() {
           setPromotions(promotions.map((p) => (p.id === editingPromotion.id ? updated : p)));
         }
       } else {
-        const response = await fetch("/api/admin/promotions", {
+        const response = await fetch(adminApi.promotions, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
@@ -202,13 +203,12 @@ export function PromotionsPage() {
     if (!selectedPromotion || !codeForm.code) return;
 
     try {
-      const response = await fetch(`/api/admin/promotions/${selectedPromotion.id}/codes`, {
+      const response = await fetch(adminApi.promotionCodes(selectedPromotion.id), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           code: codeForm.code,
           usageLimit: codeForm.usageLimit ? parseInt(codeForm.usageLimit) : null,
-          promotionId: selectedPromotion.id,
         }),
       });
       if (response.ok) {
@@ -222,7 +222,7 @@ export function PromotionsPage() {
 
   const handleDeleteCode = async (codeId: number) => {
     try {
-      const response = await fetch(`/api/admin/promotion-codes/${codeId}`, {
+      const response = await fetch(adminApi.promotionCode(codeId), {
         method: "DELETE",
       });
       if (response.ok) {
@@ -276,6 +276,11 @@ export function PromotionsPage() {
     }
   };
 
+  const searchQuery = searchTerm.trim().toLowerCase();
+  const filteredPromotions = searchQuery
+    ? promotions.filter((p) => p.name.toLowerCase().includes(searchQuery))
+    : promotions;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -305,7 +310,9 @@ export function PromotionsPage() {
             <div>
               <CardTitle>促销列表</CardTitle>
               <CardDescription>
-                共 {promotions.length} 个促销活动
+                {searchQuery
+                  ? `匹配 ${filteredPromotions.length} 条（共 ${promotions.length} 个）`
+                  : `共 ${promotions.length} 个促销活动`}
               </CardDescription>
             </div>
             <div className="relative">
@@ -335,7 +342,14 @@ export function PromotionsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {promotions.map((promotion) => (
+                {filteredPromotions.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                      没有匹配的促销活动
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredPromotions.map((promotion) => (
                   <TableRow key={promotion.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -411,7 +425,8 @@ export function PromotionsPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  ))
+                )}
               </TableBody>
             </Table>
           ) : (

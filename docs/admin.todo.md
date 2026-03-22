@@ -1,6 +1,6 @@
 # Admin 前端功能补全 TODO
 
-> 对照 `docs/shop-db.sql` 完整 schema，盘点当前 admin 前端已实现 / 未实现的功能。
+> 对照 `migrations/0001_baseline.sql` 及后续迁移后的 schema，盘点当前 admin 前端已实现 / 未实现的功能。
 > 按模块分组，标注优先级（P0 = 核心流程缺失, P1 = 重要功能缺失, P2 = 体验增强）。
 
 ---

@@ -1,6 +1,6 @@
-export { db, sqlite, initSchema } from "../index";
+export { db, sqlite, initSchema, runMigrations, listPendingMigrations } from "../index";
 export * as schema from "../schema";
-export { productDao, variantDao, inventoryDao } from "./products";
+export { productDao, variantDao, inventoryDao, inventoryMovementDao } from "./products";
 export { orderDao, orderItemDao, paymentDao, shipmentDao, orderDiscountCodeDao } from "./orders";
 export { customerDao, addressDao } from "./customers";
 export { promotionDao, discountCodeDao } from "./promotions";

@@ -1,4 +1,4 @@
-import { eq, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc } from "drizzle-orm";
 import { db } from "../index";
 import * as s from "../schema";
 import type { InferInsertModel } from "drizzle-orm";
@@ -49,6 +49,10 @@ export const menuDao = {
 };
 
 export const menuItemDao = {
+  findById(id: number) {
+    return db.select().from(s.menuItems).where(eq(s.menuItems.id, id)).get() ?? null;
+  },
+
   findByMenuId(menuId: number) {
     return db.select().from(s.menuItems)
       .where(eq(s.menuItems.menuId, menuId))
@@ -76,7 +80,10 @@ export const menuItemDao = {
 
   reorder(menuId: number, orderedIds: number[]) {
     orderedIds.forEach((id, i) => {
-      db.update(s.menuItems).set({ sortOrder: i }).where(eq(s.menuItems.id, id)).run();
+      db.update(s.menuItems)
+        .set({ sortOrder: i })
+        .where(and(eq(s.menuItems.id, id), eq(s.menuItems.menuId, menuId)))
+        .run();
     });
   },
 };

@@ -1,4 +1,5 @@
-import { collectionDao } from "../db/dao";
+import { collectionDao, metafieldValueDao } from "../db/dao";
+import { db } from "../db/index";
 import type { InferInsertModel } from "drizzle-orm";
 import { collections } from "../db/schema";
 
@@ -17,6 +18,12 @@ export const collectionService = {
     return collection;
   },
 
+  getBySlug(slug: string) {
+    const collection = collectionDao.findBySlug(slug);
+    if (!collection) throw new Error("Collection not found");
+    return collection;
+  },
+
   create(data: CollectionInsert) {
     return collectionDao.create(data);
   },
@@ -26,7 +33,10 @@ export const collectionService = {
   },
 
   delete(id: number) {
-    return collectionDao.delete(id);
+    return db.transaction(() => {
+      metafieldValueDao.deleteByResource("collection", id);
+      return collectionDao.delete(id);
+    });
   },
 
   addProduct(collectionId: number, productId: number, sortOrder = 0) {

@@ -1,6 +1,8 @@
-import { customerDao, addressDao } from "../db/dao";
+import { customerDao, addressDao, metafieldValueDao } from "../db/dao";
+import { db } from "../db/index";
 import type { InferInsertModel } from "drizzle-orm";
 import { customers, customerAddresses } from "../db/schema";
+import { assertAddressCustomerIdImmutable } from "./address-rules";
 
 type CustomerInsert = InferInsertModel<typeof customers>;
 type AddressInsert = InferInsertModel<typeof customerAddresses>;
@@ -19,15 +21,27 @@ export const customerService = {
   },
 
   create(data: CustomerInsert) {
-    return customerDao.create(data);
+    const email = data.email.trim();
+    const dup = customerDao.findByEmail(email);
+    if (dup) throw new Error("email already in use");
+    return customerDao.create({ ...data, email });
   },
 
   update(id: number, data: Partial<CustomerInsert>) {
-    return customerDao.update(id, data);
+    const patch = { ...data };
+    if (patch.email !== undefined) {
+      patch.email = patch.email.trim();
+      const dup = customerDao.findByEmail(patch.email);
+      if (dup && dup.id !== id) throw new Error("email already in use");
+    }
+    return customerDao.update(id, patch);
   },
 
   delete(id: number) {
-    return customerDao.delete(id);
+    return db.transaction(() => {
+      metafieldValueDao.deleteByResource("customer", id);
+      return customerDao.delete(id);
+    });
   },
 
   // addresses
@@ -40,6 +54,9 @@ export const customerService = {
   },
 
   updateAddress(id: number, data: Partial<AddressInsert>) {
+    const prev = addressDao.findById(id);
+    if (!prev) throw new Error("Address not found");
+    assertAddressCustomerIdImmutable(prev.customerId, data);
     return addressDao.update(id, data);
   },
 

@@ -1,3 +1,4 @@
+-- 0001_baseline — 结构基线；后续变更请追加 migrations/0002_*.sql（勿改写已发布迁移）。
 -- NOTE: these PRAGMAs are per-connection, NOT persisted in the database file.
 -- Every application connection MUST re-execute them on open.
 PRAGMA foreign_keys = ON;

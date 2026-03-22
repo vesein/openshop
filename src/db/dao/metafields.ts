@@ -56,6 +56,11 @@ export const metafieldDefinitionDao = {
 // =========================================================
 
 export const metafieldValueDao = {
+  findById(id: number) {
+    return db.select().from(s.metafieldValues)
+      .where(eq(s.metafieldValues.id, id)).get() ?? null;
+  },
+
   findByResource(resourceType: string, resourceId: number) {
     return db.select({
       id: s.metafieldValues.id,

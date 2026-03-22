@@ -1,6 +1,10 @@
 import { metafieldDefinitionDao, metafieldValueDao } from "../db/dao";
 import type { InferInsertModel } from "drizzle-orm";
 import { metafieldDefinitions, metafieldValues } from "../db/schema";
+import {
+  assertMetafieldResourceExists,
+  assertMetafieldValueMatchesDefinitionType,
+} from "./metafield-rules";
 
 type MetafieldDefinitionInsert = InferInsertModel<typeof metafieldDefinitions>;
 
@@ -47,6 +51,13 @@ export const metafieldService = {
     valueBoolean?: number | null;
     valueJson?: string | null;
   }) {
+    const def = metafieldDefinitionDao.findById(data.definitionId);
+    if (!def) throw new Error("Metafield definition not found");
+    if (def.resourceType !== data.resourceType) {
+      throw new Error("metafield definition resource_type does not match value resource_type");
+    }
+    assertMetafieldResourceExists(data.resourceType, data.resourceId);
+    assertMetafieldValueMatchesDefinitionType(def.valueType, data);
     return metafieldValueDao.upsert(data);
   },
 

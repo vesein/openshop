@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatDate } from "@/lib/date-utils";
+import { adminApi } from "@/lib/admin-api";
 
 interface Page {
   id: number;
@@ -99,7 +100,7 @@ export function PagesPage() {
 
   const fetchPages = async () => {
     try {
-      const response = await fetch("/api/admin/pages");
+      const response = await fetch(adminApi.pages);
       if (response.ok) {
         const result = await response.json();
         setPages(result.items || []);
@@ -111,7 +112,7 @@ export function PagesPage() {
 
   const fetchMenus = async () => {
     try {
-      const response = await fetch("/api/admin/menus");
+      const response = await fetch(adminApi.menus);
       if (response.ok) {
         const result = await response.json();
         setMenus(result.items || []);
@@ -161,7 +162,7 @@ export function PagesPage() {
       const data = { ...pageForm, slug };
 
       if (editingPage) {
-        const response = await fetch(`/api/admin/pages/${editingPage.id}`, {
+        const response = await fetch(adminApi.page(editingPage.id), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
@@ -171,7 +172,7 @@ export function PagesPage() {
           setPages(pages.map((p) => (p.id === editingPage.id ? updated : p)));
         }
       } else {
-        const response = await fetch("/api/admin/pages", {
+        const response = await fetch(adminApi.pages, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
@@ -214,7 +215,7 @@ export function PagesPage() {
       const data = { ...menuForm, handle };
 
       if (editingMenu) {
-        const response = await fetch(`/api/admin/menus/${editingMenu.id}`, {
+        const response = await fetch(adminApi.menu(editingMenu.id), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
@@ -224,7 +225,7 @@ export function PagesPage() {
           setMenus(menus.map((m) => (m.id === editingMenu.id ? updated : m)));
         }
       } else {
-        const response = await fetch("/api/admin/menus", {
+        const response = await fetch(adminApi.menus, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
@@ -244,9 +245,10 @@ export function PagesPage() {
     if (!deleteTarget) return;
 
     try {
-      const url = deleteTarget.type === "page"
-        ? `/api/admin/pages/${deleteTarget.id}`
-        : `/api/admin/menus/${deleteTarget.id}`;
+      const url =
+        deleteTarget.type === "page"
+          ? adminApi.page(deleteTarget.id)
+          : adminApi.menu(deleteTarget.id);
 
       const response = await fetch(url, { method: "DELETE" });
       if (response.ok) {

@@ -6,9 +6,7 @@ type ShopSettingsInsert = InferInsertModel<typeof shopSettings>;
 
 export const settingsService = {
   get() {
-    const settings = shopSettingsDao.get();
-    if (!settings) throw new Error("Shop settings not found");
-    return settings;
+    return shopSettingsDao.ensure();
   },
 
   update(data: Partial<ShopSettingsInsert>) {

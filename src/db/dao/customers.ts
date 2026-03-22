@@ -73,6 +73,10 @@ export const customerDao = {
 };
 
 export const addressDao = {
+  findById(id: number) {
+    return db.select().from(s.customerAddresses).where(eq(s.customerAddresses.id, id)).get() ?? null;
+  },
+
   findByCustomerId(customerId: number) {
     return db.select().from(s.customerAddresses)
       .where(eq(s.customerAddresses.customerId, customerId))

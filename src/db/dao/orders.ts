@@ -3,6 +3,7 @@ import { db } from "../index";
 import * as s from "../schema";
 import type { InferInsertModel } from "drizzle-orm";
 import { formatTimestamp } from "./utils";
+import { shopSettingsDao } from "./collections";
 
 // =========================================================
 // Orders
@@ -103,12 +104,14 @@ export const orderDao = {
   },
 
   dashboardStats() {
-    const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const shop = shopSettingsDao.ensure();
+    const currencyCode = shop.currencyCode || "USD";
 
     const totalOrders = db.select({ count: sql<number>`count(*)` }).from(s.orders).get()!.count;
+    // date('now') 为 UTC 日历日，与 ISO created_at（UTC）一致
     const todayOrders = db.select({ count: sql<number>`count(*)` }).from(s.orders)
-      .where(gte(s.orders.createdAt, today)).get()!.count;
+      .where(sql`date(${s.orders.createdAt}) = date('now')`)
+      .get()!.count;
     const revenue = db.select({ sum: sql<number>`coalesce(sum(total_amount), 0)` }).from(s.orders)
       .where(eq(s.orders.paymentStatus, "paid")).get()!.sum;
 
@@ -122,6 +125,7 @@ export const orderDao = {
       orderNumber: s.orders.orderNumber,
       customerEmail: s.orders.email,
       totalAmount: s.orders.totalAmount,
+      currencyCode: s.orders.currencyCode,
       status: s.orders.orderStatus,
       createdAt: s.orders.createdAt,
     }).from(s.orders)
@@ -147,7 +151,16 @@ export const orderDao = {
     .limit(10)
     .all();
 
-    return { totalOrders, todayOrders, totalRevenue: revenue, totalProducts, totalCustomers, recentOrders, lowStockProducts };
+    return {
+      totalOrders,
+      todayOrders,
+      totalRevenue: revenue,
+      totalProducts,
+      totalCustomers,
+      currencyCode,
+      recentOrders,
+      lowStockProducts,
+    };
   },
 };
 
@@ -156,6 +169,10 @@ export const orderDao = {
 // =========================================================
 
 export const orderItemDao = {
+  findById(id: number) {
+    return db.select().from(s.orderItems).where(eq(s.orderItems.id, id)).get() ?? null;
+  },
+
   findByOrderId(orderId: number) {
     return db.select().from(s.orderItems)
       .where(eq(s.orderItems.orderId, orderId))
@@ -189,6 +206,10 @@ export const orderItemDao = {
 // =========================================================
 
 export const paymentDao = {
+  findById(id: number) {
+    return db.select().from(s.payments).where(eq(s.payments.id, id)).get() ?? null;
+  },
+
   findByOrderId(orderId: number) {
     return db.select().from(s.payments)
       .where(eq(s.payments.orderId, orderId))
@@ -202,6 +223,20 @@ export const paymentDao = {
       createdAt: formatTimestamp(),
     }).returning().get();
   },
+
+  update(id: number, data: Partial<InferInsertModel<typeof s.payments>>) {
+    return db.update(s.payments)
+      .set(data)
+      .where(eq(s.payments.id, id))
+      .returning().get();
+  },
+
+  /** 与基线「支付仅追加」一致；需冲正请新增补偿记录 */
+  delete(_id: number) {
+    throw new Error(
+      "payments are append-only; keep the ledger and add a compensating record instead",
+    );
+  },
 };
 
 // =========================================================
@@ -209,6 +244,10 @@ export const paymentDao = {
 // =========================================================
 
 export const shipmentDao = {
+  findById(id: number) {
+    return db.select().from(s.shipments).where(eq(s.shipments.id, id)).get() ?? null;
+  },
+
   findByOrderId(orderId: number) {
     return db.select().from(s.shipments)
       .where(eq(s.shipments.orderId, orderId)).get() ?? null;
@@ -246,8 +285,8 @@ export const shipmentDao = {
       .returning().get();
   },
 
-  delete(id: number) {
-    return db.delete(s.shipments).where(eq(s.shipments.id, id)).run();
+  delete(_id: number) {
+    throw new Error("shipments are immutable; update status instead of deleting history");
   },
 };
 

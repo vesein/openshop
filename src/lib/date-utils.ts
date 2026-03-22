@@ -1,5 +1,5 @@
-// 格式化 UTC 时间为浏览器本地日期显示
-// 输入: UTC ISO 时间 (2026-03-21T20:56:08.428Z)
+// 后端存 UTC ISO；此处仅负责在浏览器里格式化为本地展示
+// 输入: UTC ISO (2026-03-21T20:56:08.428Z)
 // 输出: 本地日期 (2026/3/22 或 3/22/2026)
 export function formatDate(dateString: string | null | undefined): string {
   if (!dateString) return "-";

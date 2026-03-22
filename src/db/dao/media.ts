@@ -2,6 +2,7 @@ import { eq, and, desc, asc, sql } from "drizzle-orm";
 import { db } from "../index";
 import * as s from "../schema";
 import type { InferInsertModel } from "drizzle-orm";
+import { formatTimestamp } from "./utils";
 
 export const mediaDao = {
   findById(id: number) {
@@ -37,12 +38,36 @@ export const mediaDao = {
     }).returning().get();
   },
 
+  update(id: number, data: Partial<InferInsertModel<typeof s.mediaAssets>>) {
+    return db.update(s.mediaAssets)
+      .set(data)
+      .where(eq(s.mediaAssets.id, id))
+      .returning().get();
+  },
+
   delete(id: number) {
     return db.delete(s.mediaAssets).where(eq(s.mediaAssets.id, id)).returning().get();
   },
 };
 
 export const productMediaDao = {
+  findById(id: number) {
+    return db.select({
+      id: s.productMedia.id,
+      productId: s.productMedia.productId,
+      variantId: s.productMedia.variantId,
+      mediaId: s.productMedia.mediaId,
+      sortOrder: s.productMedia.sortOrder,
+      storageKey: s.mediaAssets.storageKey,
+      mimeType: s.mediaAssets.mimeType,
+      alt: s.mediaAssets.alt,
+    })
+    .from(s.productMedia)
+    .innerJoin(s.mediaAssets, eq(s.productMedia.mediaId, s.mediaAssets.id))
+    .where(eq(s.productMedia.id, id))
+    .get() ?? null;
+  },
+
   findByProductId(productId: number) {
     return db.select({
       id: s.productMedia.id,
@@ -64,7 +89,7 @@ export const productMediaDao = {
   attach(data: InferInsertModel<typeof s.productMedia>) {
     return db.insert(s.productMedia).values({
       ...data,
-      createdAt: new Date().toISOString(),
+      createdAt: formatTimestamp(),
     }).returning().get();
   },
 
@@ -78,5 +103,15 @@ export const productMediaDao = {
         eq(s.productMedia.productId, productId),
         eq(s.productMedia.mediaId, mediaId),
       )).run();
+  },
+
+  update(
+    id: number,
+    data: Partial<Pick<InferInsertModel<typeof s.productMedia>, "variantId" | "sortOrder">>,
+  ) {
+    return db.update(s.productMedia)
+      .set(data)
+      .where(eq(s.productMedia.id, id))
+      .returning().get();
   },
 };

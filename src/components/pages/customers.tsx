@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatDate, formatDateTime } from "@/lib/date-utils";
+import { adminApi } from "@/lib/admin-api";
 
 interface Customer {
   id: number;
@@ -103,15 +104,15 @@ export function CustomersPage() {
   });
 
   useEffect(() => {
-    fetchCustomers();
-  }, []);
+    void fetchCustomers();
+  }, [searchTerm]);
 
   const fetchCustomers = async () => {
     try {
       const params = new URLSearchParams();
       if (searchTerm) params.append("search", searchTerm);
 
-      const response = await fetch(`/api/admin/customers?${params.toString()}`);
+      const response = await fetch(adminApi.customers(params));
       if (response.ok) {
         const result = await response.json();
         setCustomers(result.items || []);
@@ -149,7 +150,7 @@ export function CustomersPage() {
 
   const handleView = async (customer: Customer) => {
     try {
-      const response = await fetch(`/api/admin/customers/${customer.id}`);
+      const response = await fetch(adminApi.customer(customer.id));
       if (response.ok) {
         const data = await response.json();
         setSelectedCustomer(data);
@@ -169,7 +170,7 @@ export function CustomersPage() {
     if (!selectedCustomer) return;
 
     try {
-      const response = await fetch(`/api/admin/customers/${selectedCustomer.id}`, {
+      const response = await fetch(adminApi.customer(selectedCustomer.id), {
         method: "DELETE",
       });
       if (response.ok) {
@@ -185,7 +186,7 @@ export function CustomersPage() {
   const handleSubmit = async () => {
     try {
       if (editingCustomer) {
-        const response = await fetch(`/api/admin/customers/${editingCustomer.id}`, {
+        const response = await fetch(adminApi.customer(editingCustomer.id), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(formData),
@@ -195,7 +196,7 @@ export function CustomersPage() {
           setCustomers(customers.map((c) => (c.id === editingCustomer.id ? updated : c)));
         }
       } else {
-        const response = await fetch("/api/admin/customers", {
+        const response = await fetch(adminApi.customers(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(formData),
@@ -234,7 +235,7 @@ export function CustomersPage() {
     if (!selectedCustomer) return;
 
     try {
-      const response = await fetch(`/api/admin/customers/${selectedCustomer.id}/addresses`, {
+      const response = await fetch(adminApi.customerAddresses(selectedCustomer.id), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(addressForm),
@@ -243,7 +244,7 @@ export function CustomersPage() {
         setAddressDialogOpen(false);
         // Refresh customer details if dialog is open
         if (detailDialogOpen) {
-          const detailResponse = await fetch(`/api/admin/customers/${selectedCustomer.id}`);
+          const detailResponse = await fetch(adminApi.customer(selectedCustomer.id));
           if (detailResponse.ok) {
             const data = await detailResponse.json();
             setSelectedCustomer(data);

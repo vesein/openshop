@@ -43,7 +43,13 @@ export const cartService = {
     return cartItemDao.findByCartId(cartId);
   },
 
-  addItem(data: { cartId: number; variantId: number; quantity: number; unitPriceAmount: number }) {
+  addItem(data: {
+    cartId: number;
+    variantId: number;
+    quantity: number;
+    unitPriceAmount: number;
+    discountAmount?: number;
+  }) {
     return cartItemDao.upsert(data);
   },
 

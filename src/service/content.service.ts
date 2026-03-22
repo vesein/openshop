@@ -1,6 +1,8 @@
-import { pageDao, menuDao, menuItemDao } from "../db/dao";
+import { pageDao, menuDao, menuItemDao, metafieldValueDao } from "../db/dao";
 import type { InferInsertModel } from "drizzle-orm";
+import { db } from "../db/index";
 import { pages, menus, menuItems } from "../db/schema";
+import { assertMenuItemHierarchy } from "./menu-rules";
 
 type PageInsert = InferInsertModel<typeof pages>;
 type MenuInsert = InferInsertModel<typeof menus>;
@@ -28,7 +30,10 @@ export const pageService = {
   },
 
   delete(id: number) {
-    return pageDao.delete(id);
+    return db.transaction(() => {
+      metafieldValueDao.deleteByResource("page", id);
+      return pageDao.delete(id);
+    });
   },
 };
 
@@ -62,11 +67,27 @@ export const menuService = {
   },
 
   addItem(data: MenuItemInsert) {
-    return menuItemDao.create(data);
+    return db.transaction(() => {
+      const row = menuItemDao.create(data);
+      if (row.parentId != null) {
+        assertMenuItemHierarchy(data.menuId, row.id, row.parentId);
+      }
+      return row;
+    });
   },
 
   updateItem(id: number, data: Partial<MenuItemInsert>) {
-    return menuItemDao.update(id, data);
+    return db.transaction(() => {
+      const prev = menuItemDao.findById(id);
+      if (!prev) throw new Error("Menu item not found");
+      const menuId = data.menuId ?? prev.menuId;
+      const parentId =
+        data.parentId !== undefined ? data.parentId : prev.parentId;
+      if (parentId != null) {
+        assertMenuItemHierarchy(menuId, id, parentId);
+      }
+      return menuItemDao.update(id, data);
+    });
   },
 
   removeItem(id: number) {

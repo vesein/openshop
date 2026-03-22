@@ -1,0 +1,7 @@
+-- 订单履行状态由应用层 syncOrderFulfillmentStatus（见 src/service/order-fulfillment.ts）+ shipmentService
+DROP TRIGGER IF EXISTS trg_shipments_refresh_order_after_insert;
+DROP TRIGGER IF EXISTS trg_shipments_refresh_order_after_update;
+DROP TRIGGER IF EXISTS trg_shipments_refresh_order_after_delete;
+DROP TRIGGER IF EXISTS trg_shipments_validate_order_id_before_update;
+DROP TRIGGER IF EXISTS trg_shipments_validate_status_transition_before_update;
+DROP TRIGGER IF EXISTS trg_orders_normalize_fulfillment_status_after_update;

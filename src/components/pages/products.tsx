@@ -30,6 +30,8 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { formatDate, formatDateTime } from "@/lib/date-utils";
+import { adminApi } from "@/lib/admin-api";
+import { formatMoneyMinorUnits } from "@/lib/money";
 
 interface Product {
   id: number;
@@ -64,6 +66,7 @@ interface ProductFormData {
 
 export function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [shopCurrency, setShopCurrency] = useState("USD");
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -82,8 +85,27 @@ export function ProductsPage() {
   });
 
   useEffect(() => {
-    fetchProducts();
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(adminApi.settings);
+        if (!cancelled && r.ok) {
+          const s = (await r.json()) as { currencyCode?: string };
+          const code = typeof s.currencyCode === "string" ? s.currencyCode.trim() : "";
+          if (code) setShopCurrency(code);
+        }
+      } catch {
+        /* 默认 USD */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    void fetchProducts();
+  }, [searchTerm, statusFilter]);
 
   const fetchProducts = async () => {
     try {
@@ -91,7 +113,7 @@ export function ProductsPage() {
       if (searchTerm) params.append("search", searchTerm);
       if (statusFilter !== "all") params.append("status", statusFilter);
 
-      const response = await fetch(`/api/admin/products?${params.toString()}`);
+      const response = await fetch(adminApi.products(params));
       if (response.ok) {
         const result = await response.json();
         setProducts(result.items || []);
@@ -131,7 +153,7 @@ export function ProductsPage() {
 
   const handleView = async (product: Product) => {
     try {
-      const response = await fetch(`/api/admin/products/${product.id}`);
+      const response = await fetch(adminApi.product(product.id));
       if (response.ok) {
         const data = await response.json();
         setSelectedProduct(data);
@@ -151,7 +173,7 @@ export function ProductsPage() {
     if (!selectedProduct) return;
 
     try {
-      const response = await fetch(`/api/admin/products/${selectedProduct.id}`, {
+      const response = await fetch(adminApi.product(selectedProduct.id), {
         method: "DELETE",
       });
       if (response.ok) {
@@ -167,7 +189,7 @@ export function ProductsPage() {
   const handleSubmit = async () => {
     try {
       if (editingProduct) {
-        const response = await fetch(`/api/admin/products/${editingProduct.id}`, {
+        const response = await fetch(adminApi.product(editingProduct.id), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(formData),
@@ -178,7 +200,7 @@ export function ProductsPage() {
         }
       } else {
         const slug = formData.slug || formData.title.toLowerCase().replace(/\s+/g, "-");
-        const response = await fetch("/api/admin/products", {
+        const response = await fetch(adminApi.products(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...formData, slug }),
@@ -205,10 +227,6 @@ export function ProductsPage() {
       default:
         return <Badge>{status}</Badge>;
     }
-  };
-
-  const formatPrice = (amount: number) => {
-    return `¥${(amount / 100).toFixed(2)}`;
   };
 
   if (loading) {
@@ -302,7 +320,7 @@ export function ProductsPage() {
                     <TableCell>{product.vendor || "-"}</TableCell>
                     <TableCell>
                       {product.variants && product.variants.length > 0
-                        ? formatPrice(product.variants[0]!.priceAmount)
+                        ? formatMoneyMinorUnits(product.variants[0]!.priceAmount, shopCurrency)
                         : "-"}
                     </TableCell>
                     <TableCell>
@@ -474,7 +492,7 @@ export function ProductsPage() {
                         <TableRow key={variant.id}>
                           <TableCell>{variant.title}</TableCell>
                           <TableCell className="font-mono">{variant.sku}</TableCell>
-                          <TableCell>{formatPrice(variant.priceAmount)}</TableCell>
+                          <TableCell>{formatMoneyMinorUnits(variant.priceAmount, shopCurrency)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

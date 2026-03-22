@@ -68,6 +68,10 @@ export const cartDao = {
 // =========================================================
 
 export const cartItemDao = {
+  findById(id: number) {
+    return db.select().from(s.cartItems).where(eq(s.cartItems.id, id)).get() ?? null;
+  },
+
   findByCartId(cartId: number) {
     return db.select().from(s.cartItems)
       .where(eq(s.cartItems.cartId, cartId))
@@ -75,14 +79,28 @@ export const cartItemDao = {
       .all();
   },
 
-  upsert(data: { cartId: number; variantId: number; quantity: number; unitPriceAmount: number }) {
+  upsert(data: {
+    cartId: number;
+    variantId: number;
+    quantity: number;
+    unitPriceAmount: number;
+    discountAmount?: number;
+  }) {
+    const discountAmount = data.discountAmount ?? 0;
     return db.insert(s.cartItems)
-      .values(data)
+      .values({
+        cartId: data.cartId,
+        variantId: data.variantId,
+        quantity: data.quantity,
+        unitPriceAmount: data.unitPriceAmount,
+        discountAmount,
+      })
       .onConflictDoUpdate({
         target: [s.cartItems.cartId, s.cartItems.variantId],
         set: {
           quantity: data.quantity,
           unitPriceAmount: data.unitPriceAmount,
+          discountAmount,
           updatedAt: formatTimestamp(),
         },
       })
