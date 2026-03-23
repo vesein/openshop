@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/index";
 import * as s from "../db/schema";
 import { formatTimestamp } from "../db/dao/utils";
+import { recordOrderEvent } from "./order-events";
 
 /** 与已移除的发货相关 SQLite 触发器中对 orders.fulfillment_status 的推导一致 */
 export function deriveFulfillmentStatus(
@@ -35,4 +36,9 @@ export function syncOrderFulfillmentStatus(orderId: number) {
     .set({ fulfillmentStatus: next, updatedAt: formatTimestamp() })
     .where(eq(s.orders.id, orderId))
     .run();
+
+  recordOrderEvent(orderId, "fulfillment_status_changed", {
+    from: order.fulfillmentStatus,
+    to: next,
+  });
 }

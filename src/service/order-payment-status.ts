@@ -12,10 +12,10 @@ export function derivePaymentStatus(
 ): string {
   const sumRefunded = payments
     .filter((p) => p.status === "refunded")
-    .reduce((s, p) => s + p.amount, 0);
+    .reduce((acc, p) => acc + p.amount, 0);
   const sumCaptured = payments
     .filter((p) => p.status === "captured")
-    .reduce((s, p) => s + p.amount, 0);
+    .reduce((acc, p) => acc + p.amount, 0);
   const hasRefunded = payments.some((p) => p.status === "refunded");
   const hasAuthorized = payments.some((p) => p.status === "authorized");
   const hasPending = payments.some((p) => p.status === "pending");

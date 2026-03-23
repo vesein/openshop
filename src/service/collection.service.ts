@@ -29,6 +29,8 @@ export const collectionService = {
   },
 
   update(id: number, data: Partial<CollectionInsert>) {
+    const prev = collectionDao.findById(id);
+    if (!prev) throw new Error("Collection not found");
     return collectionDao.update(id, data);
   },
 

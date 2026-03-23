@@ -26,6 +26,8 @@ export const pageService = {
   },
 
   update(id: number, data: Partial<PageInsert>) {
+    const prev = pageDao.findById(id);
+    if (!prev) throw new Error("Page not found");
     return pageDao.update(id, data);
   },
 
@@ -54,6 +56,8 @@ export const menuService = {
   },
 
   update(id: number, data: Partial<MenuInsert>) {
+    const prev = menuDao.findById(id);
+    if (!prev) throw new Error("Menu not found");
     return menuDao.update(id, data);
   },
 

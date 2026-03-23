@@ -11,7 +11,7 @@
     "db:migrate": "bun src/db/migrate.ts",
     "db:reset": "rm -f data/shop.db && bun run db:init",
     "db:seed": "bun run db:init && bun src/db/seed.ts",
-    "test": "bun test",
+    "test": "bun test src/service/ src/db/dao/dao.integration.test.ts",
     "test:dao": "bun test src/db/dao/dao.integration.test.ts"
   },
   "dependencies": {

@@ -50,9 +50,11 @@ export const paymentService = {
   update(id: number, data: Partial<PaymentInsert>) {
     return db.transaction(() => {
       assertPaymentUpdateValid(id, data);
+      const before = paymentDao.findById(id);
+      if (!before) throw new Error("Payment not found");
+      const prevStatus = getPaymentStatus(before.orderId);
       const row = paymentDao.update(id, data);
       if (!row) throw new Error("Payment not found");
-      const prevStatus = getPaymentStatus(row.orderId);
       syncOrderPaymentStatus(row.orderId);
       const nextStatus = getPaymentStatus(row.orderId);
       if (prevStatus !== nextStatus) {

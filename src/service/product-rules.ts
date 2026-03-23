@@ -3,27 +3,11 @@ import { db } from "../db/index";
 import * as s from "../db/schema";
 import { productDao, variantDao } from "../db/dao";
 
-export function assertProductDraftBeforeOptionEdit(productId: number) {
+export function assertProductDraftBeforeEdit(productId: number, editTarget: string) {
   const p = db.select({ status: s.products.status }).from(s.products).where(eq(s.products.id, productId)).get();
   if (!p) throw new Error("Product not found");
   if (p.status === "active") {
-    throw new Error("set product to draft before changing options");
-  }
-}
-
-export function assertProductDraftBeforeVariantEdit(productId: number) {
-  const p = db.select({ status: s.products.status }).from(s.products).where(eq(s.products.id, productId)).get();
-  if (!p) throw new Error("Product not found");
-  if (p.status === "active") {
-    throw new Error("set product to draft before changing variants");
-  }
-}
-
-export function assertProductDraftBeforeVariantOptionEdit(productId: number) {
-  const p = db.select({ status: s.products.status }).from(s.products).where(eq(s.products.id, productId)).get();
-  if (!p) throw new Error("Product not found");
-  if (p.status === "active") {
-    throw new Error("set product to draft before changing variant options");
+    throw new Error(`set product to draft before changing ${editTarget}`);
   }
 }
 

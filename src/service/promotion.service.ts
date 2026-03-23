@@ -58,6 +58,8 @@ export const promotionService = {
   },
 
   update(id: number, data: Partial<PromotionInsert>) {
+    const prev = promotionDao.findById(id);
+    if (!prev) throw new Error("Promotion not found");
     assertRulesJsonObject(data.rulesJson);
     assertPromotionColumns(data);
     return promotionDao.update(id, data);
@@ -76,6 +78,10 @@ export const promotionService = {
   },
 
   createCode(data: DiscountCodeInsert) {
+    const promo = promotionDao.findById(data.promotionId);
+    if (!promo) throw new Error("Promotion not found");
+    const existing = discountCodeDao.findByCode(data.code);
+    if (existing) throw new Error("discount code already exists");
     return discountCodeDao.create(data);
   },
 

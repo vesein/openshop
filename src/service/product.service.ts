@@ -18,9 +18,7 @@ import {
 import {
   assertCanActivateProduct,
   assertFeaturedMediaBelongsToProduct,
-  assertProductDraftBeforeOptionEdit,
-  assertProductDraftBeforeVariantEdit,
-  assertProductDraftBeforeVariantOptionEdit,
+  assertProductDraftBeforeEdit,
   assertSoftDeleteProductAllowed,
 } from "./product-rules";
 
@@ -75,7 +73,7 @@ export const productService = {
   },
 
   createVariant(data: VariantInsert) {
-    assertProductDraftBeforeVariantEdit(data.productId);
+    assertProductDraftBeforeEdit(data.productId, "variants");
     const variant = variantDao.create(data);
     refreshVariantOptionSignature(variant.id);
     return variant;
@@ -89,7 +87,7 @@ export const productService = {
         "variant product_id is immutable; recreate the variant under the target product",
       );
     }
-    assertProductDraftBeforeVariantEdit(prev.productId);
+    assertProductDraftBeforeEdit(prev.productId, "variants");
     const { optionSignature: _ignored, ...rest } = data as Record<string, unknown>;
     return variantDao.update(id, rest as Partial<VariantInsert>);
   },
@@ -97,7 +95,7 @@ export const productService = {
   deleteVariant(id: number) {
     const prev = variantDao.findById(id);
     if (!prev) throw new Error("Variant not found");
-    assertProductDraftBeforeVariantEdit(prev.productId);
+    assertProductDraftBeforeEdit(prev.productId, "variants");
     return db.transaction(() => {
       metafieldValueDao.deleteByResource("variant", id);
       return variantDao.delete(id);
@@ -138,7 +136,7 @@ export const productService = {
   },
 
   createOption(data: ProductOptionInsert) {
-    assertProductDraftBeforeOptionEdit(data.productId);
+    assertProductDraftBeforeEdit(data.productId, "options");
     const row = productOptionDao.create(data);
     refreshAllVariantSignaturesForProduct(data.productId);
     return row;
@@ -147,9 +145,9 @@ export const productService = {
   updateOption(id: number, data: Partial<ProductOptionInsert>) {
     const opt = productOptionDao.findById(id);
     if (!opt) throw new Error("Option not found");
-    assertProductDraftBeforeOptionEdit(opt.productId);
+    assertProductDraftBeforeEdit(opt.productId, "options");
     if (data.productId != null && data.productId !== opt.productId) {
-      assertProductDraftBeforeOptionEdit(data.productId);
+      assertProductDraftBeforeEdit(data.productId, "options");
     }
     return productOptionDao.update(id, data);
   },
@@ -157,7 +155,7 @@ export const productService = {
   deleteOption(id: number) {
     const opt = productOptionDao.findById(id);
     if (!opt) throw new Error("Option not found");
-    assertProductDraftBeforeOptionEdit(opt.productId);
+    assertProductDraftBeforeEdit(opt.productId, "options");
     const out = productOptionDao.delete(id);
     refreshAllVariantSignaturesForProduct(opt.productId);
     return out;
@@ -171,7 +169,7 @@ export const productService = {
   createOptionValue(data: ProductOptionValueInsert) {
     const po = productOptionDao.findById(data.optionId);
     if (!po) throw new Error("Option not found");
-    assertProductDraftBeforeOptionEdit(po.productId);
+    assertProductDraftBeforeEdit(po.productId, "options");
     return productOptionValueDao.create(data);
   },
 
@@ -180,7 +178,7 @@ export const productService = {
     if (!pov) throw new Error("Option value not found");
     const po = productOptionDao.findById(pov.optionId);
     if (!po) throw new Error("Option not found");
-    assertProductDraftBeforeOptionEdit(po.productId);
+    assertProductDraftBeforeEdit(po.productId, "options");
     return productOptionValueDao.update(id, data);
   },
 
@@ -189,7 +187,7 @@ export const productService = {
     if (!pov) throw new Error("Option value not found");
     const po = productOptionDao.findById(pov.optionId);
     if (!po) throw new Error("Option not found");
-    assertProductDraftBeforeOptionEdit(po.productId);
+    assertProductDraftBeforeEdit(po.productId, "options");
     const out = productOptionValueDao.delete(id);
     refreshAllVariantSignaturesForProduct(po.productId);
     return out;
@@ -203,7 +201,7 @@ export const productService = {
   replaceVariantOptionValues(variantId: number, optionValueIds: number[]) {
     const v = variantDao.findById(variantId);
     if (!v) throw new Error("Variant not found");
-    assertProductDraftBeforeVariantOptionEdit(v.productId);
+    assertProductDraftBeforeEdit(v.productId, "variant options");
 
     const seenOption = new Set<number>();
     for (const vid of optionValueIds) {

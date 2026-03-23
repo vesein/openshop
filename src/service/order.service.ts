@@ -3,6 +3,7 @@ import type { InferInsertModel } from "drizzle-orm";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/index";
 import { orders, orderItems, orderDiscountCodes, payments, shipments } from "../db/schema";
+import { formatTimestamp } from "../db/dao/utils";
 import { syncOrderFulfillmentStatus } from "./order-fulfillment";
 import { paymentService } from "./payment.service";
 import {
@@ -15,7 +16,7 @@ import {
   incrementUsageAfterOrderDiscountInsert,
 } from "./order-rules";
 import { syncOrderDiscountAmountFromAppliedCodes } from "./order-discount";
-import { recalculateOrderTotals, recalculateOrderTotalsCore } from "./order-totals";
+import { recalculateOrderTotalsCore } from "./order-totals";
 import { shipmentService } from "./shipment.service";
 import { recordOrderEvent, listOrderEvents } from "./order-events";
 
@@ -62,34 +63,41 @@ export const orderService = {
   },
 
   create(data: OrderInsert) {
-    const row = orderDao.create(data);
-    recalculateOrderTotals(row.id);
-    syncOrderFulfillmentStatus(row.id);
-    recordOrderEvent(row.id, "order_created", { orderNumber: row.orderNumber });
-    const next = orderDao.findById(row.id);
-    if (!next) throw new Error("Order not found");
-    return next;
+    return db.transaction(() => {
+      const row = orderDao.create(data);
+      recalculateOrderTotalsCore(row.id);
+      syncOrderFulfillmentStatus(row.id);
+      recordOrderEvent(row.id, "order_created", { orderNumber: row.orderNumber });
+      const next = orderDao.findById(row.id);
+      if (!next) throw new Error("Order not found");
+      return next;
+    });
   },
 
   update(id: number, data: Partial<OrderInsert>) {
-    const prev = db.select().from(orders).where(eq(orders.id, id)).get();
-    if (!prev) throw new Error("Order not found");
-    assertOrderAmountPatchAllowed(id, data, prev);
-    if (data.orderStatus != null && data.orderStatus !== prev.orderStatus) {
-      assertOrderStatusTransition(prev.orderStatus, data.orderStatus);
-    }
-    orderDao.update(id, data);
-    recalculateOrderTotals(id);
-    syncOrderFulfillmentStatus(id);
-    if (data.orderStatus != null && data.orderStatus !== prev.orderStatus) {
-      recordOrderEvent(id, "order_status_changed", {
-        from: prev.orderStatus,
-        to: data.orderStatus,
-      });
-    }
-    const next = orderDao.findById(id);
-    if (!next) throw new Error("Order not found");
-    return next;
+    return db.transaction(() => {
+      const prev = db.select().from(orders).where(eq(orders.id, id)).get();
+      if (!prev) throw new Error("Order not found");
+      assertOrderAmountPatchAllowed(id, data, prev);
+      if (data.orderStatus != null && data.orderStatus !== prev.orderStatus) {
+        assertOrderStatusTransition(prev.orderStatus, data.orderStatus);
+        if (data.orderStatus === "cancelled") {
+          data = { ...data, cancelledAt: formatTimestamp() };
+        }
+      }
+      orderDao.update(id, data);
+      recalculateOrderTotalsCore(id);
+      syncOrderFulfillmentStatus(id);
+      if (data.orderStatus != null && data.orderStatus !== prev.orderStatus) {
+        recordOrderEvent(id, "order_status_changed", {
+          from: prev.orderStatus,
+          to: data.orderStatus,
+        });
+      }
+      const next = orderDao.findById(id);
+      if (!next) throw new Error("Order not found");
+      return next;
+    });
   },
 
   // order items
@@ -98,47 +106,49 @@ export const orderService = {
   },
 
   addItem(data: OrderItemInsert) {
-    assertOrderItemsMutable(data.orderId);
-    const item = orderItemDao.create(data);
-    recalculateOrderTotals(data.orderId);
-    recordOrderEvent(data.orderId, "item_added", {
-      itemId: item.id,
-      productTitle: item.productTitle,
-      quantity: item.quantity,
+    return db.transaction(() => {
+      assertOrderItemsMutable(data.orderId);
+      const item = orderItemDao.create(data);
+      recalculateOrderTotalsCore(data.orderId);
+      recordOrderEvent(data.orderId, "item_added", {
+        itemId: item.id,
+        productTitle: item.productTitle,
+        quantity: item.quantity,
+      });
+      return item;
     });
-    return item;
   },
 
   updateItem(id: number, data: Partial<OrderItemInsert>) {
-    const before = orderItemDao.findById(id);
-    if (!before) throw new Error("Order item not found");
-    assertOrderItemsMutable(before.orderId);
-    const nextOrderId = data.orderId ?? before.orderId;
-    if (nextOrderId !== before.orderId) {
-      assertOrderItemsMutable(nextOrderId);
-    }
-    const item = orderItemDao.update(id, data);
-    if (!item) throw new Error("Order item not found");
-    recalculateOrderTotals(item.orderId);
-    if (before.orderId !== item.orderId) {
-      recalculateOrderTotals(before.orderId);
-    }
-    recordOrderEvent(item.orderId, "item_updated", { itemId: id });
-    return item;
+    return db.transaction(() => {
+      const before = orderItemDao.findById(id);
+      if (!before) throw new Error("Order item not found");
+      if (data.orderId != null && data.orderId !== before.orderId) {
+        throw new Error("order item order_id is immutable; recreate the item under the target order");
+      }
+      assertOrderItemsMutable(before.orderId);
+      const item = orderItemDao.update(id, data);
+      if (!item) throw new Error("Order item not found");
+      recalculateOrderTotalsCore(item.orderId);
+      recordOrderEvent(item.orderId, "item_updated", { itemId: id });
+      return item;
+    });
   },
 
   removeItem(id: number) {
-    const before = orderItemDao.findById(id);
-    if (before) assertOrderItemsMutable(before.orderId);
-    const row = orderItemDao.delete(id);
-    if (row) {
-      recalculateOrderTotals(row.orderId);
-      recordOrderEvent(row.orderId, "item_removed", {
-        itemId: id,
-        productTitle: row.productTitle,
-      });
-    }
-    return row;
+    return db.transaction(() => {
+      const before = orderItemDao.findById(id);
+      if (before) assertOrderItemsMutable(before.orderId);
+      const row = orderItemDao.delete(id);
+      if (row) {
+        recalculateOrderTotalsCore(row.orderId);
+        recordOrderEvent(row.orderId, "item_removed", {
+          itemId: id,
+          productTitle: row.productTitle,
+        });
+      }
+      return row;
+    });
   },
 
   // payments（实现见 paymentService）
