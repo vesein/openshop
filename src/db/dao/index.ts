@@ -11,3 +11,4 @@ export { productOptionDao, productOptionValueDao, variantOptionValueDao } from "
 export { cartDao, cartItemDao } from "./carts";
 export { menuDao, menuItemDao } from "./menus";
 export { metafieldDefinitionDao, metafieldValueDao } from "./metafields";
+export { orderEventDao } from "./order-events";

@@ -3,43 +3,28 @@ import { db } from "../db/index";
 import * as s from "../db/schema";
 import { formatTimestamp } from "../db/dao/utils";
 
-/** 与 seed / admin 中 promotions.rules_json 约定一致（可扩展） */
-export type PromotionRules = {
-  discountPercent?: number;
-  minAmount?: number;
-  discountAmount?: number;
-};
-
 /**
  * 单笔促销在「商品小计 = Σ(q×价) − 行折扣」上可减免金额（分，非负）。
  * free_shipping / bogo 不写入 order_discount_amount（由运费或行级逻辑另行处理）。
  */
 export function computePromotionDiscountCents(
   type: string,
-  rulesJson: string,
+  discountValue: number,
+  minPurchaseAmount: number,
   merchandiseSubtotalCents: number,
 ): number {
   if (merchandiseSubtotalCents <= 0) return 0;
 
-  let rules: PromotionRules;
-  try {
-    rules = JSON.parse(rulesJson) as PromotionRules;
-  } catch {
-    return 0;
-  }
-
   if (type === "percentage") {
-    const p = rules.discountPercent ?? 0;
-    if (p <= 0) return 0;
-    return Math.floor((merchandiseSubtotalCents * p) / 100);
+    if (discountValue <= 0) return 0;
+    if (merchandiseSubtotalCents < minPurchaseAmount) return 0;
+    return Math.floor((merchandiseSubtotalCents * discountValue) / 100);
   }
 
   if (type === "fixed_amount") {
-    const min = rules.minAmount ?? 0;
-    const amt = rules.discountAmount ?? 0;
-    if (amt <= 0) return 0;
-    if (merchandiseSubtotalCents < min) return 0;
-    return Math.min(amt, merchandiseSubtotalCents);
+    if (discountValue <= 0) return 0;
+    if (merchandiseSubtotalCents < minPurchaseAmount) return 0;
+    return Math.min(discountValue, merchandiseSubtotalCents);
   }
 
   return 0;
@@ -49,7 +34,7 @@ export function computePromotionDiscountCents(
  * 对已关联的多个促销，在「商品小计」上**互斥只取最大**可减金额（分），不叠加。
  */
 export function maxPromotionDiscountAmongApplied(
-  applied: { type: string; rulesJson: string }[],
+  applied: { type: string; discountValue: number; minPurchaseAmount: number }[],
   merchandiseSubtotalCents: number,
 ): number {
   if (applied.length === 0 || merchandiseSubtotalCents <= 0) return 0;
@@ -57,7 +42,7 @@ export function maxPromotionDiscountAmongApplied(
   for (const row of applied) {
     best = Math.max(
       best,
-      computePromotionDiscountCents(row.type, row.rulesJson, merchandiseSubtotalCents),
+      computePromotionDiscountCents(row.type, row.discountValue, row.minPurchaseAmount, merchandiseSubtotalCents),
     );
   }
   return Math.min(best, merchandiseSubtotalCents);
@@ -81,7 +66,8 @@ export function syncOrderDiscountAmountFromAppliedCodes(orderId: number): void {
   const applied = db
     .select({
       type: s.promotions.type,
-      rulesJson: s.promotions.rulesJson,
+      discountValue: s.promotions.discountValue,
+      minPurchaseAmount: s.promotions.minPurchaseAmount,
     })
     .from(s.orderDiscountCodes)
     .innerJoin(s.promotions, eq(s.orderDiscountCodes.promotionId, s.promotions.id))

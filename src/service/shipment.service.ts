@@ -3,6 +3,7 @@ import { db } from "../db/index";
 import { shipmentDao } from "../db/dao";
 import { shipments } from "../db/schema";
 import { syncOrderFulfillmentStatus } from "./order-fulfillment";
+import { recordOrderEvent } from "./order-events";
 
 type ShipmentInsert = InferInsertModel<typeof shipments>;
 
@@ -26,6 +27,7 @@ export const shipmentService = {
     return db.transaction(() => {
       const row = shipmentDao.create(data);
       syncOrderFulfillmentStatus(data.orderId);
+      recordOrderEvent(data.orderId, "shipment_created", { shipmentId: row.id });
       return row;
     });
   },
@@ -58,6 +60,11 @@ export const shipmentService = {
       const row = shipmentDao.markShipped(id, tracking);
       if (!row) throw new Error("Shipment not found");
       syncOrderFulfillmentStatus(row.orderId);
+      recordOrderEvent(row.orderId, "shipment_shipped", {
+        shipmentId: id,
+        carrier: tracking.carrier,
+        trackingNumber: tracking.trackingNumber,
+      });
       return row;
     });
   },
@@ -70,6 +77,7 @@ export const shipmentService = {
       const row = shipmentDao.markDelivered(id);
       if (!row) throw new Error("Shipment not found");
       syncOrderFulfillmentStatus(row.orderId);
+      recordOrderEvent(row.orderId, "shipment_delivered", { shipmentId: id });
       return row;
     });
   },

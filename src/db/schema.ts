@@ -252,6 +252,10 @@ export const promotions = sqliteTable(
     usageCount: integer("usage_count").notNull().default(0),
     oncePerCustomer: integer("once_per_customer").notNull().default(0),
     rulesJson: text("rules_json").notNull().default("{}"),
+    discountValue: integer("discount_value").notNull().default(0),
+    minPurchaseAmount: integer("min_purchase_amount").notNull().default(0),
+    buyQuantity: integer("buy_quantity"),
+    getQuantity: integer("get_quantity"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
@@ -266,6 +270,10 @@ export const promotions = sqliteTable(
       "promotions_rules_json_check",
       sql`CASE WHEN json_valid(${t.rulesJson}) THEN json_type(${t.rulesJson}) = 'object' ELSE 0 END`,
     ),
+    check("promotions_discount_value_check", sql`${t.discountValue} >= 0`),
+    check("promotions_min_purchase_amount_check", sql`${t.minPurchaseAmount} >= 0`),
+    check("promotions_buy_quantity_check", sql`${t.buyQuantity} IS NULL OR ${t.buyQuantity} > 0`),
+    check("promotions_get_quantity_check", sql`${t.getQuantity} IS NULL OR ${t.getQuantity} > 0`),
     index("idx_promotions_status_dates").on(t.status, t.startsAt, t.endsAt),
   ],
 );
@@ -575,6 +583,36 @@ export const orderItems = sqliteTable(
     ),
     index("idx_order_items_order").on(t.orderId, t.id),
     index("idx_order_items_promotion").on(t.promotionId).where(sql`${t.promotionId} IS NOT NULL`),
+  ],
+);
+
+export const orderEvents = sqliteTable(
+  "order_events",
+  {
+    id: integer("id").primaryKey(),
+    orderId: integer("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+    eventType: text("event_type").notNull(),
+    actor: text("actor").notNull().default("system"),
+    detailJson: text("detail_json").notNull().default("{}"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => [
+    check(
+      "order_events_event_type_check",
+      sql`${t.eventType} IN (
+        'order_created', 'order_status_changed',
+        'payment_status_changed', 'fulfillment_status_changed',
+        'item_added', 'item_updated', 'item_removed',
+        'discount_applied', 'discount_removed',
+        'shipment_created', 'shipment_shipped', 'shipment_delivered'
+      )`,
+    ),
+    check(
+      "order_events_detail_json_check",
+      sql`CASE WHEN json_valid(${t.detailJson}) THEN json_type(${t.detailJson}) = 'object' ELSE 0 END`,
+    ),
+    index("idx_order_events_order_created").on(t.orderId, sql`${t.createdAt} DESC`),
+    index("idx_order_events_type").on(t.eventType, sql`${t.createdAt} DESC`),
   ],
 );
 
@@ -934,6 +972,14 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     references: [shipments.orderId],
   }),
   discountCodes: many(orderDiscountCodes),
+  events: many(orderEvents),
+}));
+
+export const orderEventsRelations = relations(orderEvents, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderEvents.orderId],
+    references: [orders.id],
+  }),
 }));
 
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({

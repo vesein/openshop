@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, sql, like, isNull } from "drizzle-orm";
+import { eq, and, desc, asc, sql, like, or } from "drizzle-orm";
 import { db } from "../index";
 import * as s from "../schema";
 import type { InferInsertModel } from "drizzle-orm";
@@ -24,9 +24,11 @@ export const customerDao = {
     const { search, page = 1, pageSize = 20 } = opts;
     const conditions = [];
     if (search) {
-      conditions.push(
-        sql`${s.customers.email} LIKE ${"%" + search + "%"} OR ${s.customers.firstName} LIKE ${"%" + search + "%"} OR ${s.customers.lastName} LIKE ${"%" + search + "%"}`
-      );
+      conditions.push(or(
+        like(s.customers.email, `%${search}%`),
+        like(s.customers.firstName, `%${search}%`),
+        like(s.customers.lastName, `%${search}%`),
+      ));
     }
 
     return db.select().from(s.customers)
@@ -39,9 +41,11 @@ export const customerDao = {
   count(opts: { search?: string } = {}) {
     const conditions = [];
     if (opts.search) {
-      conditions.push(
-        sql`${s.customers.email} LIKE ${"%" + opts.search + "%"} OR ${s.customers.firstName} LIKE ${"%" + opts.search + "%"} OR ${s.customers.lastName} LIKE ${"%" + opts.search + "%"}`
-      );
+      conditions.push(or(
+        like(s.customers.email, `%${opts.search}%`),
+        like(s.customers.firstName, `%${opts.search}%`),
+        like(s.customers.lastName, `%${opts.search}%`),
+      ));
     }
     return db.select({ count: sql<number>`count(*)` })
       .from(s.customers)

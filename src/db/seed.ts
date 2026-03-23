@@ -314,11 +314,11 @@ function main() {
 
     console.log("🎁 插入促销活动 / 折扣码 / 集合 / 页面 / 菜单...");
     sqlite.exec(`
-      INSERT INTO promotions (name, type, status, starts_at, ends_at, usage_limit, rules_json)
+      INSERT INTO promotions (name, type, status, starts_at, ends_at, usage_limit, rules_json, discount_value, min_purchase_amount)
       VALUES
-        ('新用户首单9折', 'percentage', 'active', datetime('now', '-30 days'), datetime('now', '+60 days'), 1000, '{"discountPercent": 10}'),
-        ('满300减50', 'fixed_amount', 'active', datetime('now', '-15 days'), datetime('now', '+45 days'), 500, '{"minAmount": 30000, "discountAmount": 5000}'),
-        ('夏季大促', 'percentage', 'draft', datetime('now', '+30 days'), datetime('now', '+90 days'), NULL, '{"discountPercent": 20}');
+        ('新用户首单9折', 'percentage', 'active', datetime('now', '-30 days'), datetime('now', '+60 days'), 1000, '{"discountPercent": 10}', 10, 0),
+        ('满300减50', 'fixed_amount', 'active', datetime('now', '-15 days'), datetime('now', '+45 days'), 500, '{"minAmount": 30000, "discountAmount": 5000}', 5000, 30000),
+        ('夏季大促', 'percentage', 'draft', datetime('now', '+30 days'), datetime('now', '+90 days'), NULL, '{"discountPercent": 20}', 20, 0);
       INSERT INTO discount_codes (code, promotion_id, usage_limit)
       VALUES ('WELCOME10', 1, 100), ('SAVE50', 2, 50), ('SUMMER20', 3, 200);
       INSERT INTO collections (title, slug, status, description_html, published_at)

@@ -46,6 +46,10 @@ interface Promotion {
   usageCount: number;
   oncePerCustomer: number;
   rulesJson: string;
+  discountValue: number;
+  minPurchaseAmount: number;
+  buyQuantity: number | null;
+  getQuantity: number | null;
   createdAt: string;
   discountCodes?: DiscountCode[];
 }
@@ -79,39 +83,36 @@ interface PromotionFormData {
   rules: RulesData;
 }
 
-function parseRules(rulesJson: string): RulesData {
-  try {
-    const obj = JSON.parse(rulesJson);
-    return {
-      discountPercent: obj.discountPercent?.toString() ?? "",
-      discountAmount: obj.discountAmount?.toString() ?? "",
-      minPurchaseAmount: obj.minPurchaseAmount?.toString() ?? "",
-      buyQuantity: obj.buyQuantity?.toString() ?? "",
-      getQuantity: obj.getQuantity?.toString() ?? "",
-    };
-  } catch {
-    return {};
-  }
+function parseRulesFromPromotion(p: Promotion): RulesData {
+  return {
+    discountPercent: p.type === "percentage" ? p.discountValue.toString() : "",
+    discountAmount: p.type === "fixed_amount" ? p.discountValue.toString() : "",
+    minPurchaseAmount: p.minPurchaseAmount ? p.minPurchaseAmount.toString() : "",
+    buyQuantity: p.buyQuantity?.toString() ?? "",
+    getQuantity: p.getQuantity?.toString() ?? "",
+  };
 }
 
-function buildRulesJson(type: string, rules: RulesData): string {
-  const obj: Record<string, unknown> = {};
-  if (rules.minPurchaseAmount) obj.minPurchaseAmount = parseInt(rules.minPurchaseAmount);
+function buildColumnsFromRules(type: string, rules: RulesData) {
+  let discountValue = 0;
+  const minPurchaseAmount = rules.minPurchaseAmount ? parseInt(rules.minPurchaseAmount) : 0;
+  let buyQuantity: number | undefined;
+  let getQuantity: number | undefined;
+
   switch (type) {
     case "percentage":
-      if (rules.discountPercent) obj.discountPercent = parseFloat(rules.discountPercent);
+      discountValue = rules.discountPercent ? parseFloat(rules.discountPercent) : 0;
       break;
     case "fixed_amount":
-      if (rules.discountAmount) obj.discountAmount = parseInt(rules.discountAmount);
-      break;
-    case "free_shipping":
+      discountValue = rules.discountAmount ? parseInt(rules.discountAmount) : 0;
       break;
     case "bogo":
-      if (rules.buyQuantity) obj.buyQuantity = parseInt(rules.buyQuantity);
-      if (rules.getQuantity) obj.getQuantity = parseInt(rules.getQuantity);
+      buyQuantity = rules.buyQuantity ? parseInt(rules.buyQuantity) : undefined;
+      getQuantity = rules.getQuantity ? parseInt(rules.getQuantity) : undefined;
       break;
   }
-  return JSON.stringify(obj);
+
+  return { discountValue, minPurchaseAmount, buyQuantity, getQuantity };
 }
 
 export function PromotionsPage() {
@@ -195,7 +196,7 @@ export function PromotionsPage() {
       usageLimit: promotion.usageLimit?.toString() || "",
       rulesJson: promotion.rulesJson,
       oncePerCustomer: promotion.oncePerCustomer ?? 0,
-      rules: parseRules(promotion.rulesJson),
+      rules: parseRulesFromPromotion(promotion),
     });
     setDialogOpen(true);
   };
@@ -225,16 +226,19 @@ export function PromotionsPage() {
 
   const handleSubmit = async () => {
     try {
-      const rulesJson = buildRulesJson(formData.type, formData.rules);
+      const cols = buildColumnsFromRules(formData.type, formData.rules);
       const data = {
         name: formData.name,
         type: formData.type,
         status: formData.status,
-        rulesJson,
         oncePerCustomer: formData.oncePerCustomer,
         usageLimit: formData.usageLimit ? parseInt(formData.usageLimit) : null,
         startsAt: formData.startsAt || null,
         endsAt: formData.endsAt || null,
+        discountValue: cols.discountValue,
+        minPurchaseAmount: cols.minPurchaseAmount,
+        buyQuantity: cols.buyQuantity ?? null,
+        getQuantity: cols.getQuantity ?? null,
       };
 
       if (editingPromotion) {

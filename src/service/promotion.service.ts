@@ -19,6 +19,21 @@ function assertRulesJsonObject(rulesJson: string | undefined) {
   }
 }
 
+function assertPromotionColumns(data: Partial<PromotionInsert>) {
+  if (data.discountValue != null && data.discountValue < 0) {
+    throw new Error("discount_value must be non-negative");
+  }
+  if (data.minPurchaseAmount != null && data.minPurchaseAmount < 0) {
+    throw new Error("min_purchase_amount must be non-negative");
+  }
+  if (data.buyQuantity != null && data.buyQuantity <= 0) {
+    throw new Error("buy_quantity must be positive");
+  }
+  if (data.getQuantity != null && data.getQuantity <= 0) {
+    throw new Error("get_quantity must be positive");
+  }
+}
+
 export const promotionService = {
   list(opts: { status?: string; type?: string; page?: number; pageSize?: number }) {
     const items = promotionDao.list(opts);
@@ -38,11 +53,13 @@ export const promotionService = {
 
   create(data: PromotionInsert) {
     assertRulesJsonObject(data.rulesJson);
+    assertPromotionColumns(data);
     return promotionDao.create(data);
   },
 
   update(id: number, data: Partial<PromotionInsert>) {
     assertRulesJsonObject(data.rulesJson);
+    assertPromotionColumns(data);
     return promotionDao.update(id, data);
   },
 

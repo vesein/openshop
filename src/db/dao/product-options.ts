@@ -36,7 +36,7 @@ export const productOptionDao = {
   },
 
   delete(id: number) {
-    return db.delete(s.productOptions).where(eq(s.productOptions.id, id)).run();
+    return db.delete(s.productOptions).where(eq(s.productOptions.id, id)).returning().get();
   },
 };
 
@@ -72,7 +72,7 @@ export const productOptionValueDao = {
   },
 
   delete(id: number) {
-    return db.delete(s.productOptionValues).where(eq(s.productOptionValues.id, id)).run();
+    return db.delete(s.productOptionValues).where(eq(s.productOptionValues.id, id)).returning().get();
   },
 };
 
@@ -110,7 +110,7 @@ export const variantOptionValueDao = {
 
   /** 替换 variant 的所有 option values */
   replace(variantId: number, optionValueIds: number[]) {
-    db.transaction(() => {
+    return db.transaction(() => {
       db.delete(s.variantOptionValues)
         .where(eq(s.variantOptionValues.variantId, variantId)).run();
 

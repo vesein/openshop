@@ -17,6 +17,7 @@ import {
 import { syncOrderDiscountAmountFromAppliedCodes } from "./order-discount";
 import { recalculateOrderTotals, recalculateOrderTotalsCore } from "./order-totals";
 import { shipmentService } from "./shipment.service";
+import { recordOrderEvent, listOrderEvents } from "./order-events";
 
 type OrderInsert = InferInsertModel<typeof orders>;
 type OrderItemInsert = InferInsertModel<typeof orderItems>;
@@ -64,6 +65,7 @@ export const orderService = {
     const row = orderDao.create(data);
     recalculateOrderTotals(row.id);
     syncOrderFulfillmentStatus(row.id);
+    recordOrderEvent(row.id, "order_created", { orderNumber: row.orderNumber });
     const next = orderDao.findById(row.id);
     if (!next) throw new Error("Order not found");
     return next;
@@ -79,6 +81,12 @@ export const orderService = {
     orderDao.update(id, data);
     recalculateOrderTotals(id);
     syncOrderFulfillmentStatus(id);
+    if (data.orderStatus != null && data.orderStatus !== prev.orderStatus) {
+      recordOrderEvent(id, "order_status_changed", {
+        from: prev.orderStatus,
+        to: data.orderStatus,
+      });
+    }
     const next = orderDao.findById(id);
     if (!next) throw new Error("Order not found");
     return next;
@@ -93,6 +101,11 @@ export const orderService = {
     assertOrderItemsMutable(data.orderId);
     const item = orderItemDao.create(data);
     recalculateOrderTotals(data.orderId);
+    recordOrderEvent(data.orderId, "item_added", {
+      itemId: item.id,
+      productTitle: item.productTitle,
+      quantity: item.quantity,
+    });
     return item;
   },
 
@@ -110,6 +123,7 @@ export const orderService = {
     if (before.orderId !== item.orderId) {
       recalculateOrderTotals(before.orderId);
     }
+    recordOrderEvent(item.orderId, "item_updated", { itemId: id });
     return item;
   },
 
@@ -119,6 +133,10 @@ export const orderService = {
     const row = orderItemDao.delete(id);
     if (row) {
       recalculateOrderTotals(row.orderId);
+      recordOrderEvent(row.orderId, "item_removed", {
+        itemId: id,
+        productTitle: row.productTitle,
+      });
     }
     return row;
   },
@@ -170,6 +188,7 @@ export const orderService = {
       incrementUsageAfterOrderDiscountInsert(promotionId, discountCodeId);
       syncOrderDiscountAmountFromAppliedCodes(orderId);
       recalculateOrderTotalsCore(orderId);
+      recordOrderEvent(orderId, "discount_applied", { discountCodeId, promotionId });
     });
   },
 
@@ -192,6 +211,7 @@ export const orderService = {
       decrementUsageAfterOrderDiscountRemove(link.promotionId, discountCodeId);
       syncOrderDiscountAmountFromAppliedCodes(orderId);
       recalculateOrderTotalsCore(orderId);
+      recordOrderEvent(orderId, "discount_removed", { discountCodeId, promotionId: link.promotionId });
     });
   },
 
@@ -205,7 +225,13 @@ export const orderService = {
       incrementUsageAfterOrderDiscountInsert(dc.promotionId, dc.id);
       syncOrderDiscountAmountFromAppliedCodes(orderId);
       recalculateOrderTotalsCore(orderId);
+      recordOrderEvent(orderId, "discount_applied", { discountCodeId: dc.id, promotionId: dc.promotionId, code });
     });
+  },
+
+  // events
+  listEvents(orderId: number) {
+    return listOrderEvents(orderId);
   },
 
   // dashboard

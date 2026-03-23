@@ -291,6 +291,14 @@ export const orderDiscountController = {
   },
 };
 
+export const orderEventController = {
+  GET(req: Request) {
+    const orderId = parsePositiveIntParam(req.params.orderId);
+    if (orderId === null) return badRequest("invalid id");
+    return json(orderService.listEvents(orderId));
+  },
+};
+
 export const dashboardController = {
   GET() {
     return json(orderService.dashboardStats());

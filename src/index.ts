@@ -17,6 +17,7 @@ import {
   paymentController, adminPaymentDetailController,
   orderShipmentController, shipmentDetailController, shipmentActionController,
   orderDiscountController,
+  orderEventController,
   dashboardController,
 } from "./controller/order.controller";
 import {
@@ -89,6 +90,7 @@ const server = serve({
     "/api/admin/shipments/:id": shipmentDetailController,
     "/api/admin/shipments/:id/:action": shipmentActionController,
     "/api/admin/orders/:orderId/discount-codes": orderDiscountController,
+    "/api/admin/orders/:orderId/events": orderEventController,
 
     // customers
     "/api/admin/customers": customerController,

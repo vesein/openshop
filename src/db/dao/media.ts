@@ -34,7 +34,7 @@ export const mediaDao = {
   create(data: InferInsertModel<typeof s.mediaAssets>) {
     return db.insert(s.mediaAssets).values({
       ...data,
-      createdAt: new Date().toISOString(),
+      createdAt: formatTimestamp(),
     }).returning().get();
   },
 
@@ -94,7 +94,7 @@ export const productMediaDao = {
   },
 
   detach(id: number) {
-    return db.delete(s.productMedia).where(eq(s.productMedia.id, id)).run();
+    return db.delete(s.productMedia).where(eq(s.productMedia.id, id)).returning().get();
   },
 
   detachByMediaId(productId: number, mediaId: number) {
@@ -102,7 +102,7 @@ export const productMediaDao = {
       .where(and(
         eq(s.productMedia.productId, productId),
         eq(s.productMedia.mediaId, mediaId),
-      )).run();
+      )).returning().get();
   },
 
   update(

@@ -44,7 +44,7 @@ export const menuDao = {
   },
 
   delete(id: number) {
-    return db.delete(s.menus).where(eq(s.menus.id, id)).run();
+    return db.delete(s.menus).where(eq(s.menus.id, id)).returning().get();
   },
 };
 
@@ -75,15 +75,17 @@ export const menuItemDao = {
   },
 
   delete(id: number) {
-    return db.delete(s.menuItems).where(eq(s.menuItems.id, id)).run();
+    return db.delete(s.menuItems).where(eq(s.menuItems.id, id)).returning().get();
   },
 
   reorder(menuId: number, orderedIds: number[]) {
-    orderedIds.forEach((id, i) => {
-      db.update(s.menuItems)
-        .set({ sortOrder: i })
-        .where(and(eq(s.menuItems.id, id), eq(s.menuItems.menuId, menuId)))
-        .run();
+    return db.transaction(() => {
+      orderedIds.forEach((id, i) => {
+        db.update(s.menuItems)
+          .set({ sortOrder: i })
+          .where(and(eq(s.menuItems.id, id), eq(s.menuItems.menuId, menuId)))
+          .run();
+      });
     });
   },
 };
