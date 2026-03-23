@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "bun --hot src/index.ts",
     "start": "NODE_ENV=production bun src/index.ts",
-    "build": "bun run build.ts",
     "db:init": "bun -e \"import { initSchema } from './src/db/dao'; initSchema(); console.log('✓ schema initialized')\"",
     "db:migrate": "bun src/db/migrate.ts",
     "db:reset": "rm -f data/shop.db && bun run db:init",
