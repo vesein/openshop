@@ -1,10 +1,10 @@
 import { serve } from "bun";
-import index from "./index.html";
+import admin from "./front-admin/admin.html";
 
 const server = serve({
   routes: {
     // SPA fallback
-    "/*": index,
+    "/*": admin,
   },
 
   development: process.env.NODE_ENV !== "production" && {
