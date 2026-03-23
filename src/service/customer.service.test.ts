@@ -96,7 +96,7 @@ describe("customerService 集成", () => {
 
     const list = customerService.listAddresses(c.id);
     expect(list).toHaveLength(1);
-    expect(list[0].city).toBe("Shanghai");
+    expect(list[0]!.city).toBe("Shanghai");
   });
 
   test("updateAddress 禁止修改 customerId", () => {
@@ -106,7 +106,7 @@ describe("customerService 集成", () => {
 
     const addrs = customerService.listAddresses(c1.id);
     expect(() =>
-      customerService.updateAddress(addrs[0].id, { customerId: c2.id }),
+      customerService.updateAddress(addrs[0]!.id, { customerId: c2.id }),
     ).toThrow("immutable");
   });
 
@@ -118,6 +118,6 @@ describe("customerService 集成", () => {
     const result = customerService.list({ search: "SearchMe" });
     expect(result.total).toBe(1);
     expect(result.items).toHaveLength(1);
-    expect(result.items[0].firstName).toBe("SearchMe");
+    expect(result.items[0]!.firstName).toBe("SearchMe");
   });
 });

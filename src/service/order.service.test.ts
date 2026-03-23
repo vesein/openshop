@@ -35,7 +35,7 @@ describe("orderService 集成", () => {
 
     const events = orderEventDao.findByOrderId(order.id);
     expect(events).toHaveLength(1);
-    expect(events[0].eventType).toBe("order_created");
+    expect(events[0]!.eventType).toBe("order_created");
   });
 
   // ─── update ───

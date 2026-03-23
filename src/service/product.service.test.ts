@@ -168,12 +168,12 @@ describe("productService 集成", () => {
     productService.replaceVariantOptionValues(v.id, [ov1.id]);
     let linked = productService.listVariantOptionValues(v.id);
     expect(linked).toHaveLength(1);
-    expect(linked[0].value).toBe("S");
+    expect(linked[0]!.value).toBe("S");
 
     productService.replaceVariantOptionValues(v.id, [ov2.id]);
     linked = productService.listVariantOptionValues(v.id);
     expect(linked).toHaveLength(1);
-    expect(linked[0].value).toBe("M");
+    expect(linked[0]!.value).toBe("M");
   });
 
   test("replaceVariantOptionValues 同一选项不能有两个值", () => {

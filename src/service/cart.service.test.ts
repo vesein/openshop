@@ -103,7 +103,7 @@ describe("cartService 集成", () => {
     });
 
     const items = cartService.listItems(cart.id);
-    const updated = cartService.updateItemQuantity(items[0].id, 5);
+    const updated = cartService.updateItemQuantity(items[0]!.id, 5);
     expect(updated.quantity).toBe(5);
   });
 
@@ -118,7 +118,7 @@ describe("cartService 集成", () => {
     });
 
     const items = cartService.listItems(cart.id);
-    expect(() => cartService.updateItemQuantity(items[0].id, -1)).toThrow(
+    expect(() => cartService.updateItemQuantity(items[0]!.id, -1)).toThrow(
       "quantity must be positive",
     );
   });
@@ -136,7 +136,7 @@ describe("cartService 集成", () => {
     const items = cartService.listItems(cart.id);
     cartService.abandon(cart.id);
 
-    expect(() => cartService.updateItemQuantity(items[0].id, 3)).toThrow(
+    expect(() => cartService.updateItemQuantity(items[0]!.id, 3)).toThrow(
       "not active",
     );
   });
@@ -155,7 +155,7 @@ describe("cartService 集成", () => {
     const items = cartService.listItems(cart.id);
     cartService.abandon(cart.id);
 
-    expect(() => cartService.removeItem(items[0].id)).toThrow("not active");
+    expect(() => cartService.removeItem(items[0]!.id)).toThrow("not active");
   });
 
   // ─── clear ───

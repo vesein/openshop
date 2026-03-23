@@ -124,7 +124,7 @@ describe("menuService 集成", () => {
 
     menuService.reorderItems(menu.id, [i2.id, i1.id]);
     const items = menuService.listItems(menu.id);
-    expect(items[0].id).toBe(i2.id);
-    expect(items[1].id).toBe(i1.id);
+    expect(items[0]!.id).toBe(i2.id);
+    expect(items[1]!.id).toBe(i1.id);
   });
 });
