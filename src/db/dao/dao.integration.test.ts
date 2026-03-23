@@ -12,6 +12,7 @@ import {
   productDao,
   variantDao,
 } from "./products";
+import { isValidTimestamp } from "./utils";
 
 describe("DAO 集成（:memory: + migrations）", () => {
   beforeEach(() => {
@@ -44,6 +45,8 @@ describe("DAO 集成（:memory: + migrations）", () => {
       acceptsMarketing: 0,
     });
     expect(created?.email).toBe("u@example.com");
+    expect(isValidTimestamp(created!.createdAt)).toBe(true);
+    expect(isValidTimestamp(created!.updatedAt)).toBe(true);
 
     const found = customerDao.findById(created!.id);
     expect(found?.email).toBe("u@example.com");
@@ -61,6 +64,8 @@ describe("DAO 集成（:memory: + migrations）", () => {
       status: "draft",
     });
     expect(p?.slug).toBe("product-a");
+    expect(isValidTimestamp(p!.createdAt)).toBe(true);
+    expect(isValidTimestamp(p!.updatedAt)).toBe(true);
 
     const bySlug = productDao.findBySlug("product-a");
     expect(bySlug?.title).toBe("商品甲");

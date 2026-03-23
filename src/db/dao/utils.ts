@@ -5,3 +5,10 @@
 export function formatTimestamp(): string {
   return new Date().toISOString();
 }
+
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/;
+
+/** 校验时间戳是否为标准 ISO 8601 UTC 格式 */
+export function isValidTimestamp(v: string): boolean {
+  return ISO_RE.test(v);
+}

@@ -19,7 +19,7 @@ import { relations, sql } from "drizzle-orm";
 export const shopSettings = sqliteTable(
   "shop_settings",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     shopName: text("shop_name").notNull(),
     shopDescription: text("shop_description").notNull().default(""),
     currencyCode: text("currency_code").notNull().default("USD"),
@@ -28,8 +28,8 @@ export const shopSettings = sqliteTable(
     supportEmail: text("support_email").notNull().default(""),
     orderPrefix: text("order_prefix").notNull().default("ORD"),
     weightUnit: text("weight_unit").notNull().default("kg"),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check("shop_settings_id_check", sql`${t.id} = 1`),
@@ -46,7 +46,7 @@ export const shopSettings = sqliteTable(
 export const mediaAssets = sqliteTable(
   "media_assets",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     kind: text("kind").notNull(),
     storageKey: text("storage_key").notNull().unique(),
     mimeType: text("mime_type").notNull(),
@@ -54,7 +54,7 @@ export const mediaAssets = sqliteTable(
     height: integer("height"),
     sizeBytes: integer("size_bytes").notNull().default(0),
     alt: text("alt").notNull().default(""),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [check("media_assets_kind_check", sql`${t.kind} IN ('image', 'video', 'file')`)],
 );
@@ -65,7 +65,7 @@ export const mediaAssets = sqliteTable(
 export const products = sqliteTable(
   "products",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     title: text("title").notNull(),
     slug: text("slug").notNull(),
     status: text("status").notNull().default("draft"),
@@ -76,8 +76,8 @@ export const products = sqliteTable(
     seoDescription: text("seo_description").notNull().default(""),
     featuredMediaId: integer("featured_media_id").references(() => mediaAssets.id, { onDelete: "set null" }),
     publishedAt: text("published_at"),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     deletedAt: text("deleted_at"),
   },
   (t) => [
@@ -92,7 +92,7 @@ export const products = sqliteTable(
 export const productVariants = sqliteTable(
   "product_variants",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     productId: integer("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
     title: text("title").notNull().default("Default Title"),
     sku: text("sku").notNull().unique(),
@@ -106,8 +106,8 @@ export const productVariants = sqliteTable(
     isDefault: integer("is_default").notNull().default(0),
     sortOrder: integer("sort_order").notNull().default(0),
     optionSignature: text("option_signature"),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check("product_variants_price_amount_check", sql`${t.priceAmount} >= 0`),
@@ -142,11 +142,11 @@ export const productVariants = sqliteTable(
 export const productOptions = sqliteTable(
   "product_options",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     productId: integer("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     uniqueIndex("uq_product_options_product_name").on(t.productId, t.name),
@@ -157,11 +157,11 @@ export const productOptions = sqliteTable(
 export const productOptionValues = sqliteTable(
   "product_option_values",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     optionId: integer("option_id").notNull().references(() => productOptions.id, { onDelete: "cascade" }),
     value: text("value").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     uniqueIndex("uq_product_option_values_option_value").on(t.optionId, t.value),
@@ -184,12 +184,12 @@ export const variantOptionValues = sqliteTable(
 export const productMedia = sqliteTable(
   "product_media",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     productId: integer("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
     variantId: integer("variant_id").references(() => productVariants.id, { onDelete: "cascade" }),
     mediaId: integer("media_id").notNull().references(() => mediaAssets.id, { onDelete: "cascade" }),
     sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     uniqueIndex("uq_product_media_product_media").on(t.productId, t.mediaId),
@@ -204,7 +204,7 @@ export const productMedia = sqliteTable(
 export const collections = sqliteTable(
   "collections",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     title: text("title").notNull(),
     slug: text("slug").notNull(),
     status: text("status").notNull().default("draft"),
@@ -212,8 +212,8 @@ export const collections = sqliteTable(
     seoTitle: text("seo_title").notNull().default(""),
     seoDescription: text("seo_description").notNull().default(""),
     publishedAt: text("published_at"),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check("collections_status_check", sql`${t.status} IN ('draft', 'active', 'archived')`),
@@ -242,7 +242,7 @@ export const collectionProducts = sqliteTable(
 export const promotions = sqliteTable(
   "promotions",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     name: text("name").notNull(),
     type: text("type").notNull(),
     status: text("status").notNull().default("draft"),
@@ -252,8 +252,8 @@ export const promotions = sqliteTable(
     usageCount: integer("usage_count").notNull().default(0),
     oncePerCustomer: integer("once_per_customer").notNull().default(0),
     rulesJson: text("rules_json").notNull().default("{}"),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check(
@@ -273,13 +273,13 @@ export const promotions = sqliteTable(
 export const discountCodes = sqliteTable(
   "discount_codes",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     code: text("code").notNull(),
     promotionId: integer("promotion_id").notNull().references(() => promotions.id, { onDelete: "cascade" }),
     usageLimit: integer("usage_limit"),
     usageCount: integer("usage_count").notNull().default(0),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     uniqueIndex("discount_codes_code_unique").on(sql`lower(${t.code})`),
@@ -307,12 +307,12 @@ export const orderDiscountCodes = sqliteTable(
 export const inventoryItems = sqliteTable(
   "inventory_items",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     variantId: integer("variant_id").notNull().unique().references(() => productVariants.id, { onDelete: "cascade" }),
     tracked: integer("tracked").notNull().default(1),
     allowBackorder: integer("allow_backorder").notNull().default(0),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check("inventory_items_tracked_check", sql`${t.tracked} IN (0, 1)`),
@@ -324,11 +324,11 @@ export const inventoryLevels = sqliteTable(
   "inventory_levels",
   {
     inventoryItemId: integer("inventory_item_id")
-      .primaryKey({ autoIncrement: false })
+      .primaryKey()
       .references(() => inventoryItems.id, { onDelete: "cascade" }),
     onHand: integer("on_hand").notNull().default(0),
     reserved: integer("reserved").notNull().default(0),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check("inventory_levels_on_hand_check", sql`${t.onHand} >= 0`),
@@ -339,14 +339,14 @@ export const inventoryLevels = sqliteTable(
 export const inventoryMovements = sqliteTable(
   "inventory_movements",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     inventoryItemId: integer("inventory_item_id").notNull().references(() => inventoryItems.id, { onDelete: "cascade" }),
     movementType: text("movement_type").notNull(),
     quantityDelta: integer("quantity_delta").notNull(),
     referenceType: text("reference_type"),
     referenceId: integer("reference_id"),
     note: text("note").notNull().default(""),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check(
@@ -369,14 +369,14 @@ export const inventoryMovements = sqliteTable(
 export const customers = sqliteTable(
   "customers",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     email: text("email").notNull(),
     phone: text("phone").notNull().default(""),
     firstName: text("first_name").notNull().default(""),
     lastName: text("last_name").notNull().default(""),
     acceptsMarketing: integer("accepts_marketing").notNull().default(0),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     uniqueIndex("customers_email_unique").on(sql`lower(${t.email})`),
@@ -388,7 +388,7 @@ export const customers = sqliteTable(
 export const customerAddresses = sqliteTable(
   "customer_addresses",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     customerId: integer("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
     firstName: text("first_name").notNull().default(""),
     lastName: text("last_name").notNull().default(""),
@@ -402,8 +402,8 @@ export const customerAddresses = sqliteTable(
     postalCode: text("postal_code").notNull().default(""),
     isDefaultShipping: integer("is_default_shipping").notNull().default(0),
     isDefaultBilling: integer("is_default_billing").notNull().default(0),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check("customer_addresses_default_shipping_check", sql`${t.isDefaultShipping} IN (0, 1)`),
@@ -424,14 +424,14 @@ export const customerAddresses = sqliteTable(
 export const carts = sqliteTable(
   "carts",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     customerId: integer("customer_id").references(() => customers.id, { onDelete: "set null" }),
     sessionToken: text("session_token").notNull().unique(),
     currencyCode: text("currency_code").notNull(),
     status: text("status").notNull().default("active"),
     expiresAt: text("expires_at"),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check("carts_status_check", sql`${t.status} IN ('active', 'converted', 'abandoned')`),
@@ -443,14 +443,14 @@ export const carts = sqliteTable(
 export const cartItems = sqliteTable(
   "cart_items",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     cartId: integer("cart_id").notNull().references(() => carts.id, { onDelete: "cascade" }),
     variantId: integer("variant_id").notNull().references(() => productVariants.id, { onDelete: "restrict" }),
     quantity: integer("quantity").notNull(),
     unitPriceAmount: integer("unit_price_amount").notNull().default(0),
     discountAmount: integer("discount_amount").notNull().default(0),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     uniqueIndex("uq_cart_items_cart_variant").on(t.cartId, t.variantId),
@@ -467,7 +467,7 @@ export const cartItems = sqliteTable(
 export const orders = sqliteTable(
   "orders",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     orderNumber: text("order_number").notNull().unique(),
     customerId: integer("customer_id").references(() => customers.id, { onDelete: "set null" }),
     email: text("email").notNull().default(""),
@@ -487,8 +487,8 @@ export const orders = sqliteTable(
     shippingAddressJson: text("shipping_address_json").notNull().default("{}"),
     placedAt: text("placed_at"),
     cancelledAt: text("cancelled_at"),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check("orders_subtotal_check", sql`${t.subtotalAmount} >= 0`),
@@ -540,7 +540,7 @@ export const orders = sqliteTable(
 export const orderItems = sqliteTable(
   "order_items",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     orderId: integer("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
     productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
     variantId: integer("variant_id").references(() => productVariants.id, { onDelete: "set null" }),
@@ -554,7 +554,7 @@ export const orderItems = sqliteTable(
     taxAmount: integer("tax_amount").notNull().default(0),
     snapshotJson: text("snapshot_json").notNull().default("{}"),
     promotionId: integer("promotion_id").references(() => promotions.id, { onDelete: "restrict" }),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check("order_items_quantity_check", sql`${t.quantity} > 0`),
@@ -581,7 +581,7 @@ export const orderItems = sqliteTable(
 export const payments = sqliteTable(
   "payments",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     orderId: integer("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
     provider: text("provider").notNull(),
     providerPaymentId: text("provider_payment_id"),
@@ -590,7 +590,7 @@ export const payments = sqliteTable(
     status: text("status").notNull(),
     payloadJson: text("payload_json").notNull().default("{}"),
     processedAt: text("processed_at"),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check("payments_amount_check", sql`${t.amount} > 0`),
@@ -612,7 +612,7 @@ export const payments = sqliteTable(
 export const shipments = sqliteTable(
   "shipments",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     orderId: integer("order_id").notNull().unique().references(() => orders.id, { onDelete: "cascade" }),
     carrier: text("carrier").notNull().default(""),
     service: text("service").notNull().default(""),
@@ -621,7 +621,7 @@ export const shipments = sqliteTable(
     status: text("status").notNull().default("pending"),
     shippedAt: text("shipped_at"),
     deliveredAt: text("delivered_at"),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check(
@@ -637,7 +637,7 @@ export const shipments = sqliteTable(
 export const pages = sqliteTable(
   "pages",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     title: text("title").notNull(),
     slug: text("slug").notNull(),
     status: text("status").notNull().default("draft"),
@@ -645,8 +645,8 @@ export const pages = sqliteTable(
     seoDescription: text("seo_description").notNull().default(""),
     contentJson: text("content_json").notNull().default("{}"),
     publishedAt: text("published_at"),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check("pages_status_check", sql`${t.status} IN ('draft', 'active', 'archived')`),
@@ -665,11 +665,11 @@ export const pages = sqliteTable(
 export const menus = sqliteTable(
   "menus",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     name: text("name").notNull(),
     handle: text("handle").notNull(),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [uniqueIndex("menus_handle_unique").on(sql`lower(${t.handle})`)],
 );
@@ -677,14 +677,14 @@ export const menus = sqliteTable(
 export const menuItems = sqliteTable(
   "menu_items",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     menuId: integer("menu_id").notNull().references(() => menus.id, { onDelete: "cascade" }),
     parentId: integer("parent_id"),
     title: text("title").notNull(),
     linkType: text("link_type").notNull(),
     linkTarget: text("link_target").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check(
@@ -706,7 +706,7 @@ export const menuItems = sqliteTable(
 export const metafieldDefinitions = sqliteTable(
   "metafield_definitions",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     resourceType: text("resource_type").notNull(),
     namespace: text("namespace").notNull(),
     key: text("key").notNull(),
@@ -718,8 +718,8 @@ export const metafieldDefinitions = sqliteTable(
     visibleInAdmin: integer("visible_in_admin").notNull().default(1),
     visibleInStorefront: integer("visible_in_storefront").notNull().default(0),
     pinnedPosition: integer("pinned_position"),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check(
@@ -754,7 +754,7 @@ export const metafieldDefinitions = sqliteTable(
 export const metafieldValues = sqliteTable(
   "metafield_values",
   {
-    id: integer("id").primaryKey({ autoIncrement: false }),
+    id: integer("id").primaryKey(),
     definitionId: integer("definition_id").notNull(),
     resourceType: text("resource_type").notNull(),
     resourceId: integer("resource_id").notNull(),
@@ -763,8 +763,8 @@ export const metafieldValues = sqliteTable(
     valueNumber: real("value_number"),
     valueBoolean: integer("value_boolean"),
     valueJson: text("value_json"),
-    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
-    updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [
     check(
